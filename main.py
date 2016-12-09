@@ -8,6 +8,7 @@ This is a temporary script file.
 from loaddata import load_eeg, load_hypnogram
 import os
 import gc
+import test
 import numpy as np
 from tools import split_eeg, get_freq_bands
 from sklearn.ensemble import RandomForestClassifier,AdaBoostClassifier
