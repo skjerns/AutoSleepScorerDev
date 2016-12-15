@@ -5,11 +5,11 @@ Spyder Editor
 This is a temporary script file.
 """
 
-from loaddata import load_eeg, load_hypnogram
+
 import os
 import gc
-import test
 import numpy as np
+from loader import load_eeg_header, load_hypnogram, trim_channels
 from tools import split_eeg, get_freq_bands
 from sklearn.ensemble import RandomForestClassifier,AdaBoostClassifier
 from sklearn import svm
@@ -17,25 +17,36 @@ gc.collect()
 
 datadir = 'd:\\sleep\\data\EMSA\\'
 
-#data  = load_eeg('D:\sleep\data\EMSA\EMSA_asc_preprocout_datanum_1.vhdr')
-#hypno = load_hypnogram('test-Hypnogram.edf')
 
-files = [s for s in os.listdir(datadir) if s.endswith('.txt')]
-hypno = list()
-for file in files:
-    hypno.append(load_hypnogram(datadir + file))
+
+
+#files = [s for s in os.listdir(datadir) if s.endswith('.txt')]
+#hypno = list()
+#for file in files:
+#    hypno.append(load_hypnogram(datadir + file))
 
 files = [s for s in os.listdir(datadir) if s.endswith('.vhdr')]
 data = list()
 i = 0
 for file in files:
-    eeg = load_eeg(datadir + file)
-    eeg = split_eeg(eeg, 30, 100)
-    data.append(eeg)
+    channels = dict({'EOG' :'EOG',
+                    'VEOG':'EOG',
+                    'HEOG':'EOG',
+                    'EMG' :'EMG',
+                    'EEG' :'EEG',
+                    'C3'  :'EEG',
+                    'C4'  :'EEG'})
+                    
+    eeg = load_eeg_header(datadir + file)
+    eeg = trim_channels(eeg, channels)
+#    eeg = split_eeg(eeg, 30, 100)
+#    data.append(eeg.load_data())
     i = i + 1
 #    if i == 50: break;
     
-    
+
+
+STOP
 print('-----------------------------------------------------------------------')
 #%%
 i=0
