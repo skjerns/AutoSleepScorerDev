@@ -15,7 +15,7 @@ from sklearn.ensemble import RandomForestClassifier,AdaBoostClassifier
 from sklearn import svm
 gc.collect()
 
-datadir = 'd:\\sleep\\data\EMSA\\'
+datadir = 'd:\\sleep\\data\\'
 
 
 
@@ -25,9 +25,10 @@ datadir = 'd:\\sleep\\data\EMSA\\'
 #for file in files:
 #    hypno.append(load_hypnogram(datadir + file))
 
-files = [s for s in os.listdir(datadir) if s.endswith('.vhdr')]
+files = [s for s in os.listdir(datadir) if s.endswith('.edf')]
 data = list()
 i = 0
+premem = memory()/(1024*1024)
 for file in files:
     channels = dict({'EOG' :'EOG',
                     'VEOG':'EOG',
@@ -36,14 +37,17 @@ for file in files:
                     'EEG' :'EEG',
                     'C3'  :'EEG',
                     'C4'  :'EEG'})
+    print(premem-memory()/(1024*1024))
                     
     eeg = load_eeg_header(datadir + file)
-    eeg = trim_channels(eeg, channels)
+    gc.collect()
+    premem = memory()/(1024*1024)
+#    eeg = trim_channels(eeg, channels)
 #    eeg = split_eeg(eeg, 30, 100)
-#    data.append(eeg.load_data())
+#    data.append(eeg)
     i = i + 1
 #    if i == 50: break;
-    
+    gc.collect()
 
 
 STOP
