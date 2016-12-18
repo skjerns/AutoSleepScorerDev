@@ -9,44 +9,45 @@ This is a temporary script file.
 import os
 import gc
 import numpy as np
-from loader import load_eeg_header, load_hypnogram, trim_channels
-from tools import split_eeg, get_freq_bands
+from loader import load_eeg_header, load_hypnogram, trim_channels,split_eeg, check_for_normalization
 from sklearn.ensemble import RandomForestClassifier,AdaBoostClassifier
 from sklearn import svm
 gc.collect()
 
 datadir = 'd:\\sleep\\data\\'
 
+channels = dict({'EOG' :'EOG',
+                 'EOGmix':'EOG',
+                'VEOG':'EOG',
+                'HEOG':'EOG',
+                'EMG' :'EMG',
+                'EEG' :'EEG',
+                'C3'  :'EEG',
+                'C4'  :'EEG',
+                'EEG1':'EEG',
+                'EEG2':'EEG'})
 
-
-
-#files = [s for s in os.listdir(datadir) if s.endswith('.txt')]
-#hypno = list()
-#for file in files:
-#    hypno.append(load_hypnogram(datadir + file))
-
-files = [s for s in os.listdir(datadir) if s.endswith('.edf')]
+files = [s for s in os.listdir(datadir) if s.endswith('.txt')]
+hypno = list()
+for file in files:
+    hypno.append(load_hypnogram(datadir + file))
+    
+files = [s for s in os.listdir(datadir) if s.endswith('.vhdr')]
 data = list()
 i = 0
-premem = memory()/(1024*1024)
+
 for file in files:
-    channels = dict({'EOG' :'EOG',
-                    'VEOG':'EOG',
-                    'HEOG':'EOG',
-                    'EMG' :'EMG',
-                    'EEG' :'EEG',
-                    'C3'  :'EEG',
-                    'C4'  :'EEG'})
-    print(premem-memory()/(1024*1024))
-                    
-    eeg = load_eeg_header(datadir + file)
-    gc.collect()
-    premem = memory()/(1024*1024)
-#    eeg = trim_channels(eeg, channels)
-#    eeg = split_eeg(eeg, 30, 100)
-#    data.append(eeg)
+    header = load_eeg_header(datadir + file)
+    trim_channels(header, channels)
+    check_for_normalization(header)
+    eeg = header.to_data_frame()
+    eeg = split_eeg(eeg,30,100)
+    
+    # DO STUFF WITH DATA
+    data.append(eeg)
+    
+#    del 
     i = i + 1
-#    if i == 50: break;
     gc.collect()
 
 

@@ -37,7 +37,6 @@ def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
             reader = csv.reader(csvfile, delimiter=csv_delimiter)
             data = []
             for row in reader:
-                print(row)
                 data.append(row)
     else:
         print('unkown hypnogram format. please use CSV with rows as epoch')        
@@ -98,9 +97,26 @@ def load_eeg_header(filename, dataformat = '', verbose = 'WARNING'):            
     print('loaded header ' + filename)
     return data
 
+def check_for_normalization(data_header):
+    if not data_header.info['sfreq'] == 100:
+        print('WARNING: Data not with 100hz. Try resampling')      
+        
+    if not data_header.info['lowpass'] == 50:
+        print('WARNING: lowpass not at 50')
+        
+    if not 'EOG' in data_header.ch_names:
+        print('WARNING: EOG channel missing')
+    if not 'EMG' in data_header.ch_names:
+        print('WARNING: EMG channel missing')
+    if not 'EEG' in data_header.ch_names:
+        print('WARNING: EEG channel missing')
+        
+        
+
+    
     
 def trim_channels(data, channels):
-    
+    print(data.ch_names)
 #    channels dict should look like this:
 #            channels = dict({'EOG' :'EOG',
 #                    'VEOG':'EOG',
@@ -112,32 +128,31 @@ def trim_channels(data, channels):
 
     curr_ch = data.ch_names
     to_drop = list(curr_ch)
-    
     # find EMG, take first
     for ch in curr_ch:
         if ch in channels.keys():
             if channels[ch] == 'EMG': 
-                print([ch, 'EMG'])
                 to_drop.remove(ch)
+                data.rename_channels(dict({ch:'EMG'}))
                 break
+            
     # find EOG, take first
     for ch in curr_ch:
         if ch in channels.keys():
             if channels[ch] == 'EOG': 
-                print([ch, 'EOG'])
                 to_drop.remove(ch)
+                data.rename_channels(dict({ch:'EOG'}))
                 break
     # find EEG, take first
     for ch in curr_ch:
         if ch in channels.keys():
             if channels[ch] == 'EEG': 
-                print([ch, 'EEG'])
                 to_drop.remove(ch)
+                data.rename_channels(dict({ch:'EEG'}))
                 break
             
-    print(to_drop)
     data.drop_channels(to_drop)
-    return data
+#    return data     no need for return as data is immutable
 
 def split_eeg(df, epoch, sample_freq = 100):
     len(df)
