@@ -7,12 +7,13 @@ Created on Tue Dec  6 13:33:45 2016
 This is the loader for files for the AutoSleepScorer.
 """
 
-fedf = 'd:\sleep\data\EMSA_asc_preprocout_datanum_5.edf'
+edf = 'd:\sleep\data\EMSA_asc_preprocout_datanum_5.edf'
 br = 'd:\sleep\data\EMSA_asc_preprocout_datanum_5.vhdr'
 import mne.io
 import csv
 import numpy as np
 import os.path
+from scipy import fft
 
 def memory():
     import os
@@ -46,7 +47,7 @@ def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
 
 
 # loads the header file using MNE
-def load_eeg_header(filename, dataformat = '', verbose = 'WARNING'):
+def load_eeg_header(filename, dataformat = '', verbose = 'WARNING'):            # CHECK include kwargs
     dataformats = dict({
                         #'bin' :'artemis123',
                         '???' :'bti',                                           # CHECK
@@ -97,7 +98,18 @@ def load_eeg_header(filename, dataformat = '', verbose = 'WARNING'):
     print('loaded header ' + filename)
     return data
 
+    
 def trim_channels(data, channels):
+    
+#    channels dict should look like this:
+#            channels = dict({'EOG' :'EOG',
+#                    'VEOG':'EOG',
+#                    'HEOG':'EOG',
+#                    'EMG' :'EMG',
+#                    'EEG' :'EEG',
+#                    'C3'  :'EEG',
+#                    'C4'  :'EEG'})
+
     curr_ch = data.ch_names
     to_drop = list(curr_ch)
     
@@ -127,7 +139,23 @@ def trim_channels(data, channels):
     data.drop_channels(to_drop)
     return data
 
-
+def split_eeg(df, epoch, sample_freq = 100):
+    len(df)
+    splits = int(len(df)/( epoch * sample_freq ))
+    data = []
+    for i in np.arange(splits):
+        data.append(df[i*sample_freq*epoch:(i+1)*sample_freq*epoch])
+    return data
+    
+    
+def get_freq_bands (epoch):
+    w = (fft(epoch,axis=0)).real
+    w = w[:len(w)/2]
+    w = np.split(w,12)
+    for i in np.arange(12):
+        w[i] = sum(w[i])
+    
+    return np.array(np.log((np.abs(w)+0.0000000001)/2))
 
 
     
