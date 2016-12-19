@@ -32,20 +32,19 @@ hypno = list()
 for file in files:
     hypno.append(load_hypnogram(datadir + file))
     
-files = [s for s in os.listdir(datadir) if s.endswith('.vhdr')]
+files = [s for s in os.listdir(datadir) if s.endswith('.edf')]
 data = list()
 i = 0
 
 for file in files:
-    header = load_eeg_header(datadir + file)
-    trim_channels(header, channels)
-    check_for_normalization(header)
-    eeg = header.to_data_frame()
-    eeg = split_eeg(eeg,30,100)
-    
+    header = load_eeg_header(datadir + file,verbose='CRITICAL', preload=False)
+#    trim_channels(header, channels)
+#    check_for_normalization(header)
+#    eeg = header.to_data_frame()
+#    eeg = split_eeg(eeg,30,100)
+    print([str(file[-6]) + str(file[-5]), header.ch_names])
     # DO STUFF WITH DATA
-    data.append(eeg)
-    
+#    data.append(eeg)
 #    del 
     i = i + 1
     gc.collect()
@@ -53,6 +52,8 @@ for file in files:
 
 STOP
 print('-----------------------------------------------------------------------')
+
+
 #%%
 i=0
 freq = []

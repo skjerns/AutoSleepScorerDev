@@ -46,7 +46,7 @@ def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
 
 
 # loads the header file using MNE
-def load_eeg_header(filename, dataformat = '', verbose = 'WARNING'):            # CHECK include kwargs
+def load_eeg_header(filename, dataformat = '', **kwargs):            # CHECK include kwargs
     dataformats = dict({
                         #'bin' :'artemis123',
                         '???' :'bti',                                           # CHECK
@@ -68,41 +68,45 @@ def load_eeg_header(filename, dataformat = '', verbose = 'WARNING'):            
         dataformat = dataformats[ext]
         
     if dataformat == 'artemis123':
-        data = mne.io.read_raw_artemis123(filename, verbose=verbose, preload=True)             # CHECK if now in stable release
+        data = mne.io.read_raw_artemis123(filename, **kwargs)             # CHECK if now in stable release
     elif dataformat == 'bti':
-        data = mne.io.read_raw_bti(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_bti(filename, **kwargs)
     elif dataformat == 'cnt':
-        data = mne.io.read_raw_cnt(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_cnt(filename, **kwargs)
     elif dataformat == 'ctf':
-        data = mne.io.read_raw_ctf(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_ctf(filename, **kwargs)
     elif dataformat == 'edf':
-        data = mne.io.read_raw_edf(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_edf(filename, **kwargs)
     elif dataformat == 'kit':
-        data = mne.io.read_raw_kit(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_kit(filename, **kwargs)
     elif dataformat == 'nicolet':
-        data = mne.io.read_raw_nicolet(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_nicolet(filename, **kwargs)
     elif dataformat == 'eeglab':
-        data = mne.io.read_raw_eeglab(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_eeglab(filename, **kwargs)
     elif dataformat == 'brainvision':                                            # CHECK NoOptionError: No option 'markerfile' in section: 'Common Infos' 
-        data = mne.io.read_raw_brainvision(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_brainvision(filename, **kwargs)
     elif dataformat == 'egi':
-        data = mne.io.read_raw_egi(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_egi(filename, **kwargs)
     elif dataformat == 'fif':
-        data = mne.io.read_raw_fif(filename, verbose=verbose, preload=True)
+        data = mne.io.read_raw_fif(filename, **kwargs)
     else: 
-        print(['Faile extension not recognized for file: ', filename])           # CHECK throw error here    
+        print(['Failed extension not recognized for file: ', filename])           # CHECK throw error here    
   
     if not data.info['sfreq'] == 100:
         print('Warning: Sampling frequency is not 100. Consider resampling')     # CHECK implement automatic resampling
-    print('loaded header ' + filename)
+        
+    if not 'verbose' in  kwargs: print('loaded header ' + filename);
+    
     return data
 
 def check_for_normalization(data_header):
+    
     if not data_header.info['sfreq'] == 100:
         print('WARNING: Data not with 100hz. Try resampling')      
         
     if not data_header.info['lowpass'] == 50:
         print('WARNING: lowpass not at 50')
+        
         
     if not 'EOG' in data_header.ch_names:
         print('WARNING: EOG channel missing')
