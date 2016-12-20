@@ -9,6 +9,7 @@ This is the loader for files for the AutoSleepScorer.
 
 edf = 'd:\sleep\data\EMSA_asc_preprocout_datanum_5.edf'
 br = 'd:\sleep\data\EMSA_asc_preprocout_datanum_5.vhdr'
+
 import mne.io
 import csv
 import numpy as np

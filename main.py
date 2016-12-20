@@ -5,9 +5,10 @@ Spyder Editor
 This is a temporary script file.
 """
 
-
+import sys
 import os
 import gc
+from imp import reload
 import numpy as np
 from loader import load_eeg_header, load_hypnogram, trim_channels,split_eeg, check_for_normalization
 from sklearn.ensemble import RandomForestClassifier,AdaBoostClassifier
@@ -32,7 +33,7 @@ hypno = list()
 for file in files:
     hypno.append(load_hypnogram(datadir + file))
     
-files = [s for s in os.listdir(datadir) if s.endswith('.edf')]
+files = [s for s in os.listdir(datadir) if s.endswith('.vhdr')]
 data = list()
 i = 0
 
@@ -42,7 +43,7 @@ for file in files:
 #    check_for_normalization(header)
 #    eeg = header.to_data_frame()
 #    eeg = split_eeg(eeg,30,100)
-    print([str(file[-6]) + str(file[-5]), header.ch_names])
+    print([str(file[-7]) + str(file[-6]), header.ch_names])
     # DO STUFF WITH DATA
 #    data.append(eeg)
 #    del 
