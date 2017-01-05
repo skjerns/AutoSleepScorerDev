@@ -14,7 +14,10 @@ import mne.io
 import csv
 import numpy as np
 import os.path
+import pandas as pd
 from scipy import fft
+from sklearn.preprocessing import OneHotEncoder
+
 
 def memory():
     import os
@@ -22,6 +25,8 @@ def memory():
     w = WMI('.')
     result = w.query("SELECT WorkingSet FROM Win32_PerfRawData_PerfProc_Process WHERE IDProcess=%d" % os.getpid())
     return int(result[0].WorkingSet)
+    
+    
     
 def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
     
@@ -38,12 +43,19 @@ def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
             reader = csv.reader(csvfile, delimiter=csv_delimiter)
             data = []
             for row in reader:
-                data.append(row)
+                data.append(row[0])
+        
     else:
         print('unkown hypnogram format. please use CSV with rows as epoch')        
         
-                
-    return np.array(data)
+    
+    data = np.array(data).reshape(-1, 1)
+    return one_hot(data)
+
+def one_hot(hypno):
+    enc = OneHotEncoder()
+    hypno = enc.fit_transform(hypno).toarray()
+    return hypno
 
 
 # loads the header file using MNE
@@ -100,6 +112,8 @@ def load_eeg_header(filename, dataformat = '', **kwargs):            # CHECK inc
     
     return data
 
+    
+    
 def check_for_normalization(data_header):
     
     if not data_header.info['sfreq'] == 100:
@@ -134,20 +148,20 @@ def trim_channels(data, channels):
     curr_ch = data.ch_names
     to_drop = list(curr_ch)
     # find EMG, take first
-    for ch in curr_ch:
-        if ch in channels.keys():
-            if channels[ch] == 'EMG': 
-                to_drop.remove(ch)
-                data.rename_channels(dict({ch:'EMG'}))
-                break
-            
-    # find EOG, take first
-    for ch in curr_ch:
-        if ch in channels.keys():
-            if channels[ch] == 'EOG': 
-                to_drop.remove(ch)
-                data.rename_channels(dict({ch:'EOG'}))
-                break
+#    for ch in curr_ch:
+#        if ch in channels.keys():
+#            if channels[ch] == 'EMG': 
+#                to_drop.remove(ch)
+#                data.rename_channels(dict({ch:'EMG'}))
+#                break
+#            
+#    # find EOG, take first
+#    for ch in curr_ch:
+#        if ch in channels.keys():
+#            if channels[ch] == 'EOG': 
+#                to_drop.remove(ch)
+#                data.rename_channels(dict({ch:'EOG'}))
+#                break
     # find EEG, take first
     for ch in curr_ch:
         if ch in channels.keys():
@@ -160,7 +174,6 @@ def trim_channels(data, channels):
 #    return data     no need for return as data is immutable
 
 def split_eeg(df, epoch, sample_freq = 100):
-    len(df)
     splits = int(len(df)/( epoch * sample_freq ))
     data = []
     for i in np.arange(splits):
