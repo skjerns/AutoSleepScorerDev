@@ -7,9 +7,6 @@ Created on Tue Dec  6 13:33:45 2016
 This is the loader for files for the AutoSleepScorer.
 """
 
-edf = 'd:\sleep\data\EMSA_asc_preprocout_datanum_5.edf'
-br = 'd:\sleep\data\EMSA_asc_preprocout_datanum_5.vhdr'
-
 import mne.io
 import csv
 import numpy as np
@@ -39,7 +36,7 @@ def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
         dataformat = dataformats[ext]
         
     if dataformat == 'csv':
-        with open(filename, newline='') as csvfile:
+        with open(filename) as csvfile:
             reader = csv.reader(csvfile, delimiter=csv_delimiter)
             data = []
             for row in reader:
@@ -50,12 +47,12 @@ def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
         
     
     data = np.array(data).reshape(-1, 1)
-    return one_hot(data)
+    return data
 
-def one_hot(hypno):
-    enc = OneHotEncoder()
+def one_hot(hypno, n_categories):
+    enc = OneHotEncoder(n_values=n_categories)
     hypno = enc.fit_transform(hypno).toarray()
-    return hypno
+    return np.array(hypno,'int32')
 
 
 # loads the header file using MNE
