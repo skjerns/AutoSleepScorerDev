@@ -61,7 +61,7 @@ validation_data = datasets.SupervisedData(test_data ,test_target, batch_size=32,
 nin = training_data.nin
 nout = training_data.nout
 
-model = Classifier(models.RecurrentNeuralNetwork(nin, 20, nout, nlayer=2))
+model = Classifier(models.RecurrentNeuralNetwork(nin, 400, nout, nlayer=2))
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
 optimizer.setup(model)
@@ -83,13 +83,13 @@ ana = Analysis(ann.model, fname='results/tmp')
 ana.classification_analysis(validation_data.X, validation_data.T)
 #%%
 acc = 0
-
 for i in xrange(len(test_data)/32):
     idx = slice(i*32,i*32+32)
-    y = model.predict(test_data[idx])
-    t = test_target[idx]
+    y = model.predict(train_data[idx])
+    ymax = np.argmax(y,axis=1)
+    t = train_target[idx] 
     acc += F.accuracy(y,t).data
-acc = acc/(len(test_data)/32)
+acc = acc/(len(train_data)/32)
 print(acc)
     
     
