@@ -21,7 +21,7 @@ from environment import datasets
 from models import neural_networks as models
 from paradigms import supervised_learning
 from models.utilities import Classifier
-
+from sklearn.preprocessing import normalize
 
 
 
@@ -36,29 +36,31 @@ test  = [list(t) for t in zip(*test_touple)]
 
 
 train_data = np.array(train[0],'float32').squeeze()
+#train_data = train_data
 train_target = np.array(train[1],'int32').squeeze()
 
 test_data = np.array(test[0],'float32').squeeze()
 test_target = np.array(test[1],'int32').squeeze()
 
-train_target[np.not_equal(train_target,3)]=0
-train_target[train_target==3]=1
-
-test_target[np.not_equal(test_target,3)]=0
-test_target[test_target==3]=1
+#train_target[np.not_equal(train_target,3)]=0
+train_target[train_target==8]=6
+#
+#test_target[np.not_equal(test_target,3)]=0
+test_target[test_target==8]=6
 
 #np.random.shuffle(test_targ)
 
+#%% training routine
 # get data
-training_data   = datasets.SupervisedData(train_data,train_target)
-validation_data = datasets.SupervisedData(test_data ,test_target)
+training_data   = datasets.SupervisedData(train_data,train_target, batch_size=32, shuffle=False)
+validation_data = datasets.SupervisedData(test_data ,test_target, batch_size=32, shuffle=False)
 
 
 # define model
 nin = training_data.nin
 nout = training_data.nout
 
-model = Classifier(models.RecurrentNeuralNetwork(nin, 300, nout))
+model = Classifier(models.RecurrentNeuralNetwork(nin, 10, nout, nlayer=2))
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
 optimizer.setup(model)
