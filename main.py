@@ -14,7 +14,6 @@ from chainer import cuda, Function, gradient_check, report, training, utils, Var
 from chainer import datasets, iterators, optimizers, serializers
 from chainer import Link, Chain, ChainList
 from chainer.training import extensions
-from preproc import pre_process
 import chainer
 from analysis import Analysis
 from environment import datasets
@@ -22,12 +21,15 @@ from models import neural_networks as models
 from paradigms import supervised_learning
 from models.utilities import Classifier
 from sklearn.preprocessing import normalize
+from sleeploader import SleepDataset
 
+if os.name == 'posix':
+    datadir  = '/media/simon/Windows/sleep/data/'
+else:
+    datadir = 'c:\\sleep\\data\\'
+    
 
-
-
-
-train_touple,test_touple = pre_process()
+train_touple,test_touple = SleepDataset(datadir).load()
 
 train = [list(t) for t in zip(*train_touple)]
 test  = [list(t) for t in zip(*test_touple)]
@@ -60,7 +62,7 @@ validation_data = datasets.SupervisedData(test_data ,test_target, batch_size=32,
 nin = training_data.nin
 nout = training_data.nout
 
-model = Classifier(models.RecurrentNeuralNetwork(nin, 10, nout, nlayer=2))
+model = Classifier(models.RecurrentNeuralNetwork(nin, 1, nout, nlayer=2))
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
 optimizer.setup(model)

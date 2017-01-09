@@ -16,7 +16,7 @@ from scipy import fft
 from sklearn.preprocessing import OneHotEncoder
 
 
-#class SupervisedLearner(object):
+
 
 def memory():
     import os
