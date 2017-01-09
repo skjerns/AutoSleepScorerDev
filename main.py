@@ -14,26 +14,25 @@ from chainer import cuda, Function, gradient_check, report, training, utils, Var
 from chainer import datasets, iterators, optimizers, serializers
 from chainer import Link, Chain, ChainList
 from chainer.training import extensions
-import chainer
 from analysis import Analysis
 from environment import datasets
 from models import neural_networks as models
 from paradigms import supervised_learning
 from models.utilities import Classifier
 from sklearn.preprocessing import normalize
-from sleeploader import SleepDataset
+if 'SleepDataset' not in vars(): from sleeploader import SleepDataset
 
 if os.name == 'posix':
     datadir  = '/media/simon/Windows/sleep/data/'
 else:
     datadir = 'c:\\sleep\\data\\'
     
+sleep = SleepDataset(datadir)
 
-train_touple,test_touple = SleepDataset(datadir).load()
+train_touple,test_touple = sleep.load()
 
 train = [list(t) for t in zip(*train_touple)]
 test  = [list(t) for t in zip(*test_touple)]
-
 
 
 
@@ -62,7 +61,7 @@ validation_data = datasets.SupervisedData(test_data ,test_target, batch_size=32,
 nin = training_data.nin
 nout = training_data.nout
 
-model = Classifier(models.RecurrentNeuralNetwork(nin, 1, nout, nlayer=2))
+model = Classifier(models.RecurrentNeuralNetwork(nin, 20, nout, nlayer=2))
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
 optimizer.setup(model)
@@ -82,3 +81,15 @@ ana = Analysis(ann.model, fname='results/tmp')
 
 # analyse data
 ana.classification_analysis(validation_data.X, validation_data.T)
+#%%
+acc = 0
+
+for i in xrange(len(test_data)/32):
+    idx = slice(i*32,i*32+32)
+    y = model.predict(test_data[idx])
+    t = test_target[idx]
+    acc += F.accuracy(y,t).data
+acc = acc/(len(test_data)/32)
+print(acc)
+    
+    
