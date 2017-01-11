@@ -3,16 +3,12 @@ import os
 import re
 from loader import load_eeg_header, load_hypnogram, trim_channels,split_eeg, check_for_normalization
 import numpy as np
+import numpy.random as random
 print('loader')
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
     
-class MyClass:
-    static_elem = 123
-
-    def __init__(self):
-        self.object_elem = 456
         
 class SleepDataset():
     train_data = list()
@@ -26,6 +22,7 @@ class SleepDataset():
                 'EEG' :'EEG',
                 'C3'  :'EEG',
                 'C4'  :'EEG',
+                'C3A2':'EEG',
                 'EEG1':'EEG',
                 'EEG2':'EEG'})
     
@@ -35,51 +32,66 @@ class SleepDataset():
         :param dirlist: a directory string. yes it´s not a list yet.
         """
         if self.loaded == True:
-            print("Data already loaded. To reload add parameter reload=True")
+            print("Data already loaded. To reload add parameter force_reload=True")
         self.dirlist = dirlist
+        return None
             
        
-    def load(self, force_reload=False):
+    def load(self, sel = [], shuffle = True,  force_reload = False):
 
         if self.loaded == True and force_reload == False:
             return self.train_data, self.test_data
         else:
             print('Reloading DataSet')
-        self.rnd = np.random.RandomState(seed=42)
+        self.rnd = random.RandomState(seed=35)
+        
+        
+        
+        # check hypno_filenames
         self.hypno_files = [s for s in os.listdir(self.dirlist) if s.endswith('.txt')]
         self.hypno_files = sorted(self.hypno_files, key = natural_key)
+
+        # check eeg_filenames
+        self.eeg_files = [s for s in os.listdir(self.dirlist) if s.endswith('.rec')]
+        self.eeg_files = sorted(self.eeg_files, key = natural_key)
+        
+        if len(self.hypno_files) != len(self.eeg_files): print('ERROR: Not the same number of Hypno and EEG files.')
+        # select slice
+        if sel==[]: sel = range(len(self.hypno_files))
+        print(sel)
+        self.hypno_files = map(self.hypno_files.__getitem__, sel)
+        self.eeg_files = map(self.eeg_files.__getitem__, sel)
+#        self.hypno_files = self.hypno_files[sel]
+#        self.eeg_files   = self.eeg_files[sel]
+        
+        # shuffle if wanted
+        if shuffle == True:
+            self.shuffle_list = list(zip(self.hypno_files, self.eeg_files))
+            self.rnd.shuffle(self.shuffle_list)
+            self.hypno_files, self.eeg_files = zip(*self.shuffle_list)
+            
+        # load Hpyno files
         self.hypno = list()
         for i in range(len(self.hypno_files)):
             self.hypno.append(load_hypnogram(self.dirlist + self.hypno_files[i]))
         
-        self.files = [s for s in os.listdir(self.dirlist) if s.endswith('.vhdr')]
-        self.files = sorted(self.files, key = natural_key)
-        assign = np.array([1]*10 + [0]*23)  # create split for train/test set
-        self.rnd.shuffle(assign)
-    
-        assign = np.insert(assign,16,[2]*18)   # leave out child data for now
-    
-        
-        
-        for i in range(len(self.files)):
-            if i > 14 and i < 32: continue;
-            if assign[i]==2:continue;
+        self.assign = np.array([0]*(len(self.hypno_files)-len(self.hypno_files)/3) + [1]*(len(self.hypno_files)/3))
+
+        for i in range(len(self.eeg_files)):
             print(i)
-            header = load_eeg_header(self.dirlist + self.files[i],verbose='CRITICAL', preload=True)
+            header = load_eeg_header(self.dirlist + self.eeg_files[i],verbose='CRITICAL', preload=True)
             trim_channels(header, self.channels)
             check_for_normalization(header)
             eeg = np.array(header.to_data_frame())
             eeg = split_eeg(eeg,30,100)
         #    print([str(files[i][-7:-5]), header.ch_names])
             # DO STUFF WITH DATA
-            if assign[i] == 0:
+            if self.assign[i] == 0:
                 SleepDataset.train_data.extend(zip(eeg,self.hypno[i]))
-            elif assign[i] == 1:
+            elif self.assign[i] == 1:
                 SleepDataset.test_data.extend(zip(eeg,self.hypno[i]))
             else:
                 print('should not happen')
            
-        #    del 
-            i = i + 1
         SleepDataset.loaded = True
         return SleepDataset.train_data, SleepDataset.test_data

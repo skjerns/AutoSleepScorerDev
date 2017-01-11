@@ -11,7 +11,6 @@ import mne.io
 import csv
 import numpy as np
 import os.path
-import pandas as pd
 from scipy import fft
 from sklearn.preprocessing import OneHotEncoder
 
@@ -154,7 +153,7 @@ def trim_channels(data, channels):
 #                data.rename_channels(dict({ch:'EMG'}))
 #                break
 #            
-#    # find EOG, take first
+    # find EOG, take first
 #    for ch in curr_ch:
 #        if ch in channels.keys():
 #            if channels[ch] == 'EOG': 
