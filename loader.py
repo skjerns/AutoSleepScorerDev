@@ -13,7 +13,7 @@ import numpy as np
 import os.path
 from scipy import fft
 from sklearn.preprocessing import OneHotEncoder
-
+import sys
 
 
 
@@ -171,11 +171,12 @@ def trim_channels(data, channels):
     data.drop_channels(to_drop)
 #    return data     no need for return as data is immutable
 
-def split_eeg(df, epoch, sample_freq = 100):
-    splits = int(len(df)/( epoch * sample_freq ))
+def split_eeg(df, epochlength, sample_freq = 100):
+    splits = int(len(df)/( epochlength * sample_freq ))
     data = []
     for i in np.arange(splits):
-        data.append(df[i*sample_freq*epoch:(i+1)*sample_freq*epoch])
+        data.append(df[i*sample_freq*epochlength:(i+1)*sample_freq*epochlength])
+    sys.stdout.flush()
     return data
     
     
@@ -187,16 +188,8 @@ def get_freq_bands (epoch):
         w[i] = sum(w[i])
     
     return np.array(np.log((np.abs(w)+0.0000000001)/2))
+    
 
-
-    
-    
-    
-    
-    
-def test():
-    print('this should not be loaded (test1 in loader.py)')
-    
 print ('loaded loader.py')
     
 

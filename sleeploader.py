@@ -43,7 +43,7 @@ class SleepDataset():
             return self.train_data, self.test_data
         else:
             print('Reloading DataSet')
-        self.rnd = random.RandomState(seed=35)
+        self.rnd = random.RandomState(seed=23)
         
         
         
@@ -52,10 +52,12 @@ class SleepDataset():
         self.hypno_files = sorted(self.hypno_files, key = natural_key)
 
         # check eeg_filenames
-        self.eeg_files = [s for s in os.listdir(self.dirlist) if s.endswith('.rec')]
+        self.eeg_files = [s for s in os.listdir(self.dirlist) if s.endswith(('.vhdr','rec','edf'))]
         self.eeg_files = sorted(self.eeg_files, key = natural_key)
         
-        if len(self.hypno_files) != len(self.eeg_files): print('ERROR: Not the same number of Hypno and EEG files.')
+        if len(self.hypno_files) != len(self.eeg_files): 
+            print('ERROR: Not the same number of Hypno and EEG files. Hypno: ' + str(len(self.hypno_files))+ ', EEG: ' + str(len(self.eeg_files)))
+            
         # select slice
         if sel==[]: sel = range(len(self.hypno_files))
         print(sel)
@@ -69,14 +71,15 @@ class SleepDataset():
             self.shuffle_list = list(zip(self.hypno_files, self.eeg_files))
             self.rnd.shuffle(self.shuffle_list)
             self.hypno_files, self.eeg_files = zip(*self.shuffle_list)
-            
-        # load Hpyno files
+        print('Hypno files')
+        # load Hypno files
         self.hypno = list()
         for i in range(len(self.hypno_files)):
             self.hypno.append(load_hypnogram(self.dirlist + self.hypno_files[i]))
         
+        print('EEG files')
         self.assign = np.array([0]*(len(self.hypno_files)-len(self.hypno_files)/3) + [1]*(len(self.hypno_files)/3))
-
+        # load EEG files
         for i in range(len(self.eeg_files)):
             print(i)
             header = load_eeg_header(self.dirlist + self.eeg_files[i],verbose='CRITICAL', preload=True)
@@ -84,8 +87,10 @@ class SleepDataset():
             check_for_normalization(header)
             eeg = np.array(header.to_data_frame())
             eeg = split_eeg(eeg,30,100)
-        #    print([str(files[i][-7:-5]), header.ch_names])
+            #    print([str(files[i][-7:-5]), header.ch_names])
             # DO STUFF WITH DATA
+            if(len(eeg) != len(self.hypno[i])):
+                print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(self.hypno[i])))
             if self.assign[i] == 0:
                 SleepDataset.train_data.extend(zip(eeg,self.hypno[i]))
             elif self.assign[i] == 1:
