@@ -87,7 +87,6 @@ class SleepDataset():
             check_for_normalization(header)
             eeg = np.array(header.to_data_frame())
             eeg = split_eeg(eeg,30,100)
-            #    print([str(files[i][-7:-5]), header.ch_names])
             # DO STUFF WITH DATA
             if(len(eeg) != len(self.hypno[i])):
                 print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(self.hypno[i])))

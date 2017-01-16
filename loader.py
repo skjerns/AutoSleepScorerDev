@@ -183,8 +183,8 @@ def split_eeg(df, epochlength, sample_freq = 100):
 def get_freq_bands (epoch):
     w = (fft(epoch,axis=0)).real
     w = w[:len(w)/2]
-    w = np.split(w,12)
-    for i in np.arange(12):
+    w = np.split(w,30)
+    for i in np.arange(30):
         w[i] = sum(w[i])
     
     return np.array(np.log((np.abs(w)+0.0000000001)/2))

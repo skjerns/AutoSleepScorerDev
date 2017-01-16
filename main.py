@@ -27,15 +27,15 @@ else:
 #    datadir = 'c:\\sleep\\vinc\\'
     
 sleep = sleeploader.SleepDataset(datadir)
-#selection = np.array(range(0,14))
-selection = np.array(range(15))
+selection = np.array(range(0,14)+range(33,50))
+#selection = np.array(range(15))
 train_touple,test_touple = sleep.load(selection,force_reload=False, shuffle=False)
 
 train = [list(t) for t in zip(*train_touple)]
 test  = [list(t) for t in zip(*test_touple)]
 
-#train_data = [loader.get_freq_bands(epoch) for epoch in train[0]]
-#test_data = [loader.get_freq_bands(epoch) for epoch in test[0]]
+train_data = [loader.get_freq_bands(epoch) for epoch in train[0]]
+test_data = [loader.get_freq_bands(epoch) for epoch in test[0]]
 
 train_data = np.array(train[0],'float32').squeeze()
 train_target = np.array(train[1],'int32').squeeze()
@@ -57,10 +57,10 @@ test_target[test_target==5]=1
 
 
 #%%
-batch_size = 64
-neurons = 100
+batch_size = 16
+neurons = 20
 layers = 3
-epochs= 1000
+epochs= 100
 clipping = 25
 decay = 1e-5
 
@@ -98,7 +98,7 @@ ana.classification_analysis(validation_data.X, validation_data.T)
 #%%
 acc = 0
 for i in xrange(len(train_data)/32):
-    idx = slice(i*32,i*32+32)
+    idx = slice((i)*32,(i)*32+32)
     y = model.predict(train_data[idx])
     ymax = np.argmax(y,axis=1)
     t = train_target[idx] 
