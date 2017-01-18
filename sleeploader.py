@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
 import re
-from tools import load_eeg_header, load_hypnogram, trim_channels,split_eeg, check_for_normalization
 import numpy as np
 import numpy.random as random
 import tools
@@ -24,6 +23,7 @@ class SleepDataset(Singleton):
     
     loaded = False
     shuffle_index = list()
+    subjects = list()
     channels = dict({'EOG' :'EOG',
                  'EOGmix':'EOG',
                 'VEOG':'EOG',
@@ -51,18 +51,26 @@ class SleepDataset(Singleton):
         
         
     def load_eeg(self,filename):
-        header = load_eeg_header(self.dirlist + filename, verbose='CRITICAL', preload=True)
-        trim_channels(header, self.channels)
-        check_for_normalization(header)
+        header = tools.load_eeg_header(self.dirlist + filename, verbose='CRITICAL', preload=True)
+        tools.trim_channels(header, self.channels)
+        tools.check_for_normalization(header)
         eeg = np.array(header.to_data_frame())
-        eeg = split_eeg(eeg,30,100)
+        eeg = tools.split_eeg(eeg,30,100)
         return eeg
         
         
     def shuffle_data(self):
         if self.loaded == False: print('ERROR: Data not loaded yet')
-        self.data, self.hypno, self.shuffle_index = tools.shuffle(self.data,self.hypno,self.shuffle_index, random_state=self.rng)
+        self.data, self.hypno, self.shuffle_index, self.subjects = tools.shuffle(self.data, self.hypno, self.shuffle_index, self.subjects, random_state=self.rng)
         return None
+        
+        
+    def get_subject(self, index):  
+        """
+        :param index: get subject [index] from loaded data. indexing from before shuffle is preserved
+        """
+        return self.data[self.shuffle_index.index(index)], self.hypno[self.shuffle_index.index(index)] # index.index(index), beautiful isn't it?? :)
+        
         
         
     def get_train(self, split=30, flat=True):
@@ -80,13 +88,6 @@ class SleepDataset(Singleton):
         else:
             return self.data[:end], self.hypno[:end]
             
-            
-    def get_subject(self, index):  
-        """
-        :param index: get subject [index] from loaded data. indexing from before shuffle is preserved
-        """
-        return self.data[self.shuffle_index.index(index)], self.hypno[self.shuffle_index.index(index)] # index.index(index), beautiful isn't it?? :)
-        
         
     def get_test(self, split=30, flat=True):
         """
@@ -139,10 +140,11 @@ class SleepDataset(Singleton):
         self.hypno_files = map(self.hypno_files.__getitem__, sel)
         self.eeg_files   = map(self.eeg_files.__getitem__, sel)
         self.shuffle_index = list(sel);
+        self.subjects = zip(self.eeg_files,self.hypno_files)
 
         # load Hypno files
         for i in range(len(self.hypno_files)):
-            self.hypno.append(load_hypnogram(self.dirlist + self.hypno_files[i]))
+            self.hypno.append(tools.load_hypnogram(self.dirlist + self.hypno_files[i]))
         
         # load EEG files
         for i in range(len(self.eeg_files)):
