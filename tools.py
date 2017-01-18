@@ -46,7 +46,7 @@ def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
             reader = csv.reader(csvfile, delimiter=csv_delimiter)
             data = []
             for row in reader:
-                data.append(row[0])
+                data.append(int(row[0]))
         
     else:
         print('unkown hypnogram format. please use CSV with rows as epoch')        

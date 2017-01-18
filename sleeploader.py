@@ -19,13 +19,11 @@ class Singleton(object):
         class_._instances[class_] = super(Singleton, class_).__new__(class_)#, *args, **kwargs)
         
     return class_._instances[class_]
-    
-
-
-   
+       
 class SleepDataset(Singleton):
     
     loaded = False
+    shuffle_index = list()
     channels = dict({'EOG' :'EOG',
                  'EOGmix':'EOG',
                 'VEOG':'EOG',
@@ -61,16 +59,33 @@ class SleepDataset(Singleton):
         return eeg
         
         
+    def shuffle_data(self):
+        if self.loaded == False: print('ERROR: Data not loaded yet')
+        self.data, self.hypno, self.shuffle_index = tools.shuffle(self.data,self.hypno,self.shuffle_index, random_state=self.rng)
+        return None
+        
+        
     def get_train(self, split=30, flat=True):
         """
         :param split: int 0-100, split ratio used for test set
         :param flat: select if data will be returned in a flat list or a list per subject
         """
+    
+        if self.loaded == False: print('ERROR: Data not loaded yet')
+            
         end = int(len(self.data)-len(self.data)*(split/100.0))
+        
         if flat == True:
             return  [item for sublist in self.data[:end] for item in sublist], [item for sublist in self.hypno[:end] for item in sublist]
         else:
             return self.data[:end], self.hypno[:end]
+            
+            
+    def get_subject(self, index):  
+        """
+        :param index: get subject [index] from loaded data. indexing from before shuffle is preserved
+        """
+        return self.data[self.shuffle_index.index(index)], self.hypno[self.shuffle_index.index(index)] # index.index(index), beautiful isn't it?? :)
         
         
     def get_test(self, split=30, flat=True):
@@ -78,6 +93,9 @@ class SleepDataset(Singleton):
         :param split: int 0-100, split ratio used for test set
         :param flat: select if data will be returned in a flat list or a list per subject
         """
+        
+        if self.loaded == False: print('ERROR: Data not loaded yet')
+            
         start = int(len(self.data)-len(self.data)*(split/100.0))
         
         if flat == True:
@@ -120,11 +138,8 @@ class SleepDataset(Singleton):
         if sel==[]: sel = range(len(self.hypno_files))
         self.hypno_files = map(self.hypno_files.__getitem__, sel)
         self.eeg_files   = map(self.eeg_files.__getitem__, sel)
+        self.shuffle_index = list(sel);
 
-        # shuffle if wanted
-        if shuffle == True:
-            self.hypno_files, self.eeg_files = tools.shuffle(self.hypno_files,self.eeg_files, random_state=self.rng)
-            
         # load Hypno files
         for i in range(len(self.hypno_files)):
             self.hypno.append(load_hypnogram(self.dirlist + self.hypno_files[i]))
@@ -136,7 +151,11 @@ class SleepDataset(Singleton):
                 print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(self.hypno[i])))
             self.data.append(eeg)
             
+        # shuffle if wanted
+        if shuffle == True:
+            self.shuffle_data()
         self.loaded = True
+        
         # select if data will be returned in a flat list or a list per subject
         if flat == True:
             return  [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
