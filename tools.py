@@ -4,7 +4,7 @@ Created on Tue Dec  6 13:33:45 2016
 
 @author: Simon
 
-This is the loader for files for the AutoSleepScorer.
+These are tools for the AutoSleepScorer.
 """
 
 import mne.io
@@ -13,8 +13,8 @@ import numpy as np
 import os.path
 from scipy import fft
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.utils import shuffle
 import sys
-
 
 
 def memory():
@@ -24,6 +24,11 @@ def memory():
     result = w.query("SELECT WorkingSet FROM Win32_PerfRawData_PerfProc_Process WHERE IDProcess=%d" % os.getpid())
     return int(result[0].WorkingSet)
     
+def append_line(csv_filename, fields):
+    with open(csv_filename, 'ab') as f:
+        writer = csv.writer(f,delimiter=';')
+        writer.writerow(fields)
+
     
     
 def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
@@ -54,7 +59,13 @@ def one_hot(hypno, n_categories):
     enc = OneHotEncoder(n_values=n_categories)
     hypno = enc.fit_transform(hypno).toarray()
     return np.array(hypno,'int32')
-
+    
+def shuffle_lists(*args,**options):
+     """ function which shuffles two lists and keeps their elements aligned
+         for now use sklearn, maybe later get rid of dependency
+     """
+     return shuffle(*args,**options)
+    
 
 # loads the header file using MNE
 def load_eeg_header(filename, dataformat = '', **kwargs):            # CHECK include kwargs
@@ -190,7 +201,7 @@ def get_freq_bands (epoch):
     return np.array(np.log((np.abs(w)+0.0000000001)/2))
     
 
-print ('loaded loader.py')
+print ('loaded tools.py')
     
 
     
