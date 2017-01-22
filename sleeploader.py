@@ -4,7 +4,6 @@ import re
 import numpy as np
 import numpy.random as random
 import tools
-print('loaded SleepLoader.py')
 
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
@@ -12,6 +11,7 @@ def natural_key(string_):
   
     
 class Singleton(object):
+    
   _instances = {}
   def __new__(class_, *args, **kwargs):
     if class_ not in class_._instances:
@@ -19,8 +19,9 @@ class Singleton(object):
         
     return class_._instances[class_]
        
+
 class SleepDataset(Singleton):
-    
+
     loaded = False
     shuffle_index = list()
     subjects = list()
@@ -36,8 +37,7 @@ class SleepDataset(Singleton):
                 'EEG1':'EEG',
                 'EEG2':'EEG'})
 
-    def __init__(self, dirlist):
-#        print(loaded)
+    def __init__(self, directory):
         """
         :param dirlist: a directory string. yes it´s not a list yet.
         """
@@ -46,20 +46,27 @@ class SleepDataset(Singleton):
         else:
             self.data = list()
             self.hypno = list()  
-        self.dirlist = dirlist + '\\'
+        self.directory = directory + '\\'
         return None
         
         
-    def load_eeg(self,filename):
-        header = tools.load_eeg_header(self.dirlist + filename, verbose='CRITICAL', preload=True)
+    def load_eeg(self, filename, samp_per_epoch = 3000):
+        """
+        :param filename: loads the given eeg file
+        """        
+        header = tools.load_eeg_header(self.directory + filename, verbose='CRITICAL', preload=True)
         tools.trim_channels(header, self.channels)
         tools.check_for_normalization(header)
         eeg = np.array(header.to_data_frame())
-        eeg = tools.split_eeg(eeg,30,100)
+        eeg = eeg[:(len(eeg)/samp_per_epoch)*samp_per_epoch]     # remove left over to ensure len(data)%3000==0
+        eeg = tools.split_eeg(eeg,1,100)
         return eeg
         
         
     def shuffle_data(self):
+        """
+        Shuffle subjects that are loaded. Returns None
+        """
         if self.loaded == False: print('ERROR: Data not loaded yet')
         self.data, self.hypno, self.shuffle_index, self.subjects = tools.shuffle(self.data, self.hypno, self.shuffle_index, self.subjects, random_state=self.rng)
         return None
@@ -69,6 +76,7 @@ class SleepDataset(Singleton):
         """
         :param index: get subject [index] from loaded data. indexing from before shuffle is preserved
         """
+        if self.loaded == False: print('ERROR: Data not loaded yet')
         return self.data[self.shuffle_index.index(index)], self.hypno[self.shuffle_index.index(index)] # index.index(index), beautiful isn't it?? :)
         
         
@@ -119,17 +127,19 @@ class SleepDataset(Singleton):
         elif force_reload==True:
             print('Reloading Dataset')
         else:
-            print('Loading Dataset')   
-
+            print('Loading Dataset') 
+            
+        self.data = list()
+        self.hypno = list()  
         self.selection = sel    
         self.rng = random.RandomState(seed=23)
     
         # check hypno_filenames
-        self.hypno_files = [s for s in os.listdir(self.dirlist) if s.endswith('.txt')]
+        self.hypno_files = [s for s in os.listdir(self.directory) if s.endswith('.txt')]
         self.hypno_files = sorted(self.hypno_files, key = natural_key)
 
         # check eeg_filenames
-        self.eeg_files = [s for s in os.listdir(self.dirlist) if s.endswith(('.vhdr','rec','edf'))]
+        self.eeg_files = [s for s in os.listdir(self.directory) if s.endswith(('.vhdr','rec','edf'))]
         self.eeg_files = sorted(self.eeg_files, key = natural_key)
         
         if len(self.hypno_files) != len(self.eeg_files): 
@@ -144,22 +154,29 @@ class SleepDataset(Singleton):
 
         # load Hypno files
         for i in range(len(self.hypno_files)):
-            self.hypno.append(tools.load_hypnogram(self.dirlist + self.hypno_files[i]))
-        
+            self.curr_hypno = tools.load_hypnogram(self.directory + self.hypno_files[i])
+            self.curr_hypno = np.repeat(self.curr_hypno,30)
+            self.hypno.append(self.curr_hypno)
+            
         # load EEG files
         for i in range(len(self.eeg_files)):
-            eeg = self.load_eeg(self.eeg_files[i])
+            eeg = self.load_eeg(self.eeg_files[i], samp_per_epoch=3000)
             if(len(eeg) != len(self.hypno[i])):
                 print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(self.hypno[i])))
             self.data.append(eeg)
             
+        self.loaded = True
+        
         # shuffle if wanted
         if shuffle == True:
             self.shuffle_data()
-        self.loaded = True
+            
         
+
         # select if data will be returned in a flat list or a list per subject
         if flat == True:
             return  [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
         else:
             return self.data,self.hypno
+            
+print('loaded sleeploader.py')
