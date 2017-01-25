@@ -46,7 +46,10 @@ class SleepDataset(Singleton):
         else:
             self.data = list()
             self.hypno = list()  
-        self.directory = directory + '\\'
+        if os.name != 'posix':
+            self.directory = directory + '\\'
+        else:
+            self.directory = directory
         return None
         
         
@@ -79,6 +82,18 @@ class SleepDataset(Singleton):
         if self.loaded == False: print('ERROR: Data not loaded yet')
         return self.data[self.shuffle_index.index(index)], self.hypno[self.shuffle_index.index(index)] # index.index(index), beautiful isn't it?? :)
         
+    def get_all_data(self, flat=True):
+        """
+        returns all data that is loaded
+        :param flat: select if data will be returned in a flat list or a list per subject
+        """
+    
+        if self.loaded == False: print('ERROR: Data not loaded yet')
+            
+        if flat == True:
+            return  [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
+        else:
+            return self.data, self.hypno
         
         
     def get_train(self, split=30, flat=True):
@@ -123,9 +138,16 @@ class SleepDataset(Singleton):
         
         if self.loaded == True and force_reload == False and np.array_equal(sel, self.selection)==True:
             print('Getting Dataset')
-            return [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
+            if shuffle == True:
+                self.shuffle_data()
+            if flat == True:
+                return [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
+            else:
+                return self.data,self.hypno    
+            
         elif force_reload==True:
             print('Reloading Dataset')
+            
         else:
             print('Loading Dataset') 
             

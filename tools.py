@@ -11,6 +11,7 @@ import mne.io
 import csv
 import numpy as np
 import os.path
+#import pyfftw
 from scipy import fft
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.utils import shuffle
@@ -191,6 +192,9 @@ def split_eeg(df, epochlength=30, sample_freq = 100):
     
     
 def get_freq_bands (epoch):
+#    print('new fft!')
+#    fft = pyfftw.builders.fft(epoch,axis=0,threads=4)
+#    w = (fft()).real
     w = (fft(epoch,axis=0)).real
     w = w[:len(w)/2]
     w = np.split(w,50)
