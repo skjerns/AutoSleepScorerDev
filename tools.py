@@ -15,8 +15,40 @@ import os.path
 from scipy import fft
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.utils import shuffle
-import sys
+import json
+import os
+import re
 
+with open('..\AutoSleepScorer\experiments.csv', 'r') as csvfile:
+    writer = csv.DictReader(csvfile, delimiter=";")
+    dic = list()
+    for row in writer:
+        dic.append(row)
+        
+def natural_key(string_):
+    """See http://www.codinghorror.com/blog/archives/001018.html"""
+    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]      
+        
+def jsondict2csv(json_file, csv_file):
+    
+    key_set = set()
+    dict_list = list()
+    with open(json_file) as f:
+        for line in f:
+            dic = json.loads(line)
+            map(key_set.add,dic.keys())
+            dict_list.append(dic)
+    keys = list(sorted(key_set, key = natural_key))
+    
+    with open(csv_file, 'wb') as f:
+        w = csv.DictWriter(f, keys, delimiter=';')
+        w.writeheader()
+        w.writerows(dict_list)
+    
+def append_json(json_filename, dic):
+    with open(json_filename, 'a') as f:
+        json.dump(dic, f)
+        f.write('\n')    
 
 def memory():
     import os
@@ -24,13 +56,6 @@ def memory():
     w = WMI('.')
     result = w.query("SELECT WorkingSet FROM Win32_PerfRawData_PerfProc_Process WHERE IDProcess=%d" % os.getpid())
     return int(result[0].WorkingSet)
-    
-def append_line(csv_filename, fields):
-    with open(csv_filename, 'ab') as f:
-        writer = csv.writer(f,delimiter=';')
-        writer.writerow(fields)
-
-    
     
 def load_hypnogram(filename, dataformat = '', csv_delimiter='\t'):
     
