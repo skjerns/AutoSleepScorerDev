@@ -13,16 +13,19 @@ import datasets
 import supervised_learning
 import chainer
 import chainer.functions as F
-from analysis import Analysis
+from custom_analysis import Analysis
 from models import neural_networks as models
 from models.utilities import Classifier
 if not 'sleeploader' in vars() :import sleeploader  # prevent reloading module
 import tools
 import time
+from sklearn import metrics
+import matplotlib.pyplot as plt
+
 
 
 if os.name == 'posix':
-    datadir  = '/media/simon/Windows/sleep/data/'
+    datadir  = '/home/simon/sleep/'
 else:
     datadir = 'c:\\sleep\\data\\'
 #    datadir = 'c:\\sleep\\vinc\\'
@@ -32,13 +35,14 @@ else:
 sleep = sleeploader.SleepDataset(datadir)
 selection = np.array(range(0,14)+range(33,50))
 selection = np.array(range(2))
-sleep.load(selection, force_reload=False, shuffle=True, flat=True)
+#selection=[]
+sleep.load(selection, force_reload=False, shuffle=False, flat=True,chunk_size=200)
 
 train_data, train_target = sleep.get_train()
 test_data, test_target = sleep.get_test()
 start=time.time()
-#train_data = [tools.get_freq_bands(epoch) for epoch in train_data]
-#test_data = [tools.get_freq_bands(epoch) for epoch in test_data]
+train_data = [tools.get_freq_bands(epoch) for epoch in train_data]
+test_data = [tools.get_freq_bands(epoch) for epoch in test_data]
 
 
 print(time.time()-start)
@@ -48,13 +52,23 @@ train_target = np.array(train_target,'int32').squeeze()
 test_data = np.array(test_data,'float32')
 test_target = np.array(test_target,'int32').squeeze()
 
+# use this for freq data if more than 1 channel used
+test_data = test_data.reshape((-1,test_data.shape[-1]*test_data.shape[-2]),order='F')
+train_data = train_data.reshape((-1,train_data.shape[-1]*train_data.shape[-2]),order='F')
 
+# use this for 1D data if more than 1 channel used
+#test_data = test_data.reshape((-1,3),order='C')
+#train_data = train_data.reshape((-1,3),order='C')
+
+# 1D-Data
 #train_data = train_data.flatten()
 #test_data = train_data.flatten()
 #train_target = train_target.repeat(100)
 #test_target = test_target.repeat(100)
-#train_data = np.matrix(train_data).T
-#test_data = np.matrix(test_data).T
+#train_data = train_data.reshape((-1,1))
+#test_data = test_data.reshape((-1,1))
+#train_data = train_data[np.newaxis].T
+#test_data = test_data[np.newaxis].T
 
 #train_target[np.not_equal(train_target,5)]=0
 train_target[train_target==8]=6
@@ -71,22 +85,22 @@ test_target[test_target==8]=6
 
 #%%
 batch_size = 128
-neurons = 50
+neurons = 10
 layers = 3
-epochs= 1
+epochs= 200
 clipping =  15
 decay = 1e-5
 cutoff = 50
-comment = '{}-StatefulGRU-freq-100samplebin-all-data'
-link = L.StatefulGRU
-
-
+comment = 'LSTM-freq-1s-3ch'
+link = L.LSTM
+gpu=-1
+    
 #%% training routine
 # get data
 
 starttime = time.time()
-training_data   = datasets.SupervisedData(train_data, train_target, batch_size=batch_size, shuffle=False)
-validation_data = datasets.SupervisedData(test_data, test_target, batch_size=batch_size, shuffle=False)
+training_data   = datasets.DynamicData(train_data, train_target, batch_size=batch_size)
+validation_data = datasets.DynamicData(test_data, test_target, batch_size=batch_size)
 #validation_data = training_data
 #validation_data = training_data
 # define model
@@ -99,9 +113,10 @@ model = Classifier(models.RecurrentNeuralNetwork(nin, neurons, nout, nlayer=laye
 #model = Classifier(models.DeepNeuralNetwork(nin, neurons, nout, nlayer=layers))
 
 
-#chainer.cuda.get_device(0).use()
-#model.to_gpu() 
-gpu=-1
+if gpu >= 0:
+    chainer.cuda.memory_pool.free_all_blocks()
+    chainer.cuda.get_device(0).use()
+    model.to_gpu() 
 
 # Set up an optimizer
 optimizer = chainer.optimizers.Adam()
@@ -109,58 +124,69 @@ optimizer.setup(model)
 optimizer.add_hook(chainer.optimizer.GradientClipping(clipping))
 optimizer.add_hook(chainer.optimizer.WeightDecay(decay))
 
-ann = supervised_learning.SupervisedLearner(optimizer, gpu=gpu)
+ann = supervised_learning.RecurrentLearner(optimizer, gpu=gpu, cutoff=cutoff)
 
 # Finally we run the optimization
-ann.optimize(training_data, validation_data=validation_data, epochs=epochs, cutoff=cutoff)
+ann.optimize(training_data, validation_data=validation_data, epochs=epochs)
 
 runtime = time.time() - starttime
-comment = comment.format(model.predictor.type)
+                   
+#%%  Reporting and analysis.
+
+
 
 # plot loss and throughput
 ann.report('results/{}-{}-{}-{}-{}-{}-{}'.format(layers,neurons,epochs,clipping,decay,batch_size, comment))
-
 # create analysis object
-
-ana = Analysis(ann.model,gpu=gpu, fname='results/{}-{}-{}-{}-{}-{}-{}'.format(layers,neurons,epochs,clipping,decay,batch_size, comment))
+ann.model.to_cpu()
+ana = Analysis(ann.model,gpu=-1, fname='results/{}-{}-{}-{}-{}-{}-{}'.format(layers,neurons,epochs,clipping,decay,batch_size, comment))
 start = time.time()
-# analyse data
-ana.classification_analysis(validation_data.X, validation_data.T)
 
-print((time.time()-start) / 60.0)      
-#%%
-# calculate accuracy
+Y, T = ana.predict(training_data)
+train_acc   = metrics.accuracy_score(Y,T)
+train_f1    = metrics.f1_score(Y,T,average='macro')
+train_conf   = ana.confusion_matrix(Y,T,plot=False)
 
-train_acc = ana.accuracy(training_data)
-start = time.time()
-test_acc  = ana.accuracy(validation_data)
-print((time.time()-start) / 60.0)      
-print("\nAccuracy: Test: {}, Train: {}".format(test_acc,train_acc))
+Y, T = ana.predict(validation_data)
+test_acc    = metrics.accuracy_score(Y,T)
+test_f1     = metrics.f1_score(Y,T,average='macro')
+classreport = metrics.classification_report(Y,T)
+test_conf   = ana.confusion_matrix(Y,T,plot=True)
+ 
+print("\nAccuracy: Test: {}%, Train: {}%".format("%.2f" % test_acc,"%.2f" % train_acc))
+print("F1: \t  Test: {}%, Train: {}%".format("%.2f" % test_f1,"%.2f" % train_f1))
 
+print((time.time()-start) / 60.0)
 #%%
 # save results
 train_loss = ann.log[('training','loss')][-1]
 test_loss  = ann.log[('validation','loss')][-1]
-save = {'1 Time':time.strftime("%c"),
-        'Dataset':datadir,
-        'Runtime': "%.2f" % (runtime/60),
-        '5 Layers':layers,
-        '10 Neurons':neurons,
-        '15 Epochs':epochs,
-        'Clipping':clipping,
-        'Weightdecay':decay,
-        'Batch-Size':batch_size,
-        'Cutoff':cutoff,
-        '20 Train-Acc':"%.2f" % train_acc,
-        '25 Val-Acc':"%.2f" % test_acc,
-        'Train-Loss':"%.5f" %train_loss,
-        'Val-Loss':"%.5f" %test_loss,
-        '30 Comment':comment,
-        'Selection':str(selection),
-        'Shape':str(train_data.shape),
-        'Link':str(link),
-        '3 Type':str(model.predictor.type)
-        }
+np.set_printoptions(precision=2,threshold=np.nan)
 
-tools.append_json('experiments.json', save)
+save_dict = {'1 Time':time.strftime("%c"),
+            'Dataset':datadir,
+            'Runtime': "%.2f" % (runtime/60),
+            '5 Layers':layers,
+            '10 Neurons':neurons,
+            '15 Epochs':epochs,
+            'Clipping':clipping,
+            'Weightdecay':decay,
+            'Batch-Size':batch_size,
+            'Cutoff':cutoff,
+            '20 Train-Acc':"%.2f" % train_acc,
+            '25 Val-Acc':"%.2f" % test_acc,
+            'Train-Loss':"%.5f" %train_loss,
+            'Val-Loss':"%.5f" %test_loss,
+            '30 Comment':comment,
+            'Selection':str(len(selection)) + ' in ' + str(selection) ,
+            'Shape':str(train_data.shape) ,
+            'Link':str(link),
+            'Report':classreport,
+            '22 Train-F1':"%.2f" %  train_f1,
+            '27 Val-F1':"%.2f" %  test_f1,
+            'Train-Confusion': str(train_conf),
+            'Val-Confusion':  str(test_conf)
+                      }
+np.set_printoptions(precision=2,threshold=1000)
+tools.append_json('experiments.json', save_dict)
 tools.jsondict2csv('experiments.json', 'experiments.csv')

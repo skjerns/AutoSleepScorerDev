@@ -4,6 +4,8 @@ import re
 import numpy as np
 import numpy.random as random
 import tools
+import csv
+import mne
 
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
@@ -51,19 +53,164 @@ class SleepDataset(Singleton):
         else:
             self.directory = directory
         return None
+    
+    
+    def check_for_normalization(self,data_header):
+    
+        if not data_header.info['sfreq'] == 100:
+            print('WARNING: Data not with 100hz. Try resampling')      
+            
+        if not data_header.info['lowpass'] == 50:
+            print('WARNING: lowpass not at 50')
+            
+        if not 'EOG' in data_header.ch_names:
+            print('WARNING: EOG channel missing')
+        if not 'EMG' in data_header.ch_names:
+            print('WARNING: EMG channel missing')
+        if not 'EEG' in data_header.ch_names:
+            print('WARNING: EEG channel missing')
         
         
-    def load_eeg(self, filename, samp_per_epoch = 3000):
+    def load_hypnogram(self, filename, dataformat = '', csv_delimiter='\t'):
+        """
+        returns an array with sleep stages
+        :param filename: loads the given hypno file
+        """
+        dataformats = dict({
+                            'txt' :'csv',
+                            'csv' :'csv',                                           
+                            })
+        if dataformat == '' :      # try to guess format by extension 
+            ext = os.path.splitext(filename)[1][1:].strip().lower()                
+            dataformat = dataformats[ext]
+            
+        if dataformat == 'csv':
+            with open(filename) as csvfile:
+                reader = csv.reader(csvfile, delimiter=csv_delimiter)
+                lhypno = []
+                for row in reader:
+                    lhypno.append(int(row[0]))
+        else:
+            print('unkown hypnogram format. please use CSV with rows as epoch')        
+
+        lhypno = np.array(lhypno).reshape(-1, 1)
+        return lhypno   
+        
+    
+    def load_eeg_header(self,filename, dataformat = '', **kwargs):            # CHECK include kwargs
+        dataformats = dict({
+                            #'bin' :'artemis123',
+                            '???' :'bti',                                           # CHECK
+                            'cnt' :'cnt',
+                            'ds'  :'ctf',
+                            'edf' :'edf',
+                            'rec' :'edf',
+                            'bdf' :'edf',
+                            'sqd' :'kit',
+                            'data':'nicolet',
+                            'set' :'eeglab',
+                            'vhdr':'brainvision',
+                            'egi' :'egi',
+                            'fif':'fif',
+                            'gz':'fif',
+                            })
+        if dataformat == '' :      # try to guess format by extension 
+            ext = os.path.splitext(filename)[1][1:].strip().lower()                
+            dataformat = dataformats[ext]
+            
+        if dataformat == 'artemis123':
+            data = mne.io.read_raw_artemis123(filename, **kwargs)             # CHECK if now in stable release
+        elif dataformat == 'bti':
+            data = mne.io.read_raw_bti(filename, **kwargs)
+        elif dataformat == 'cnt':
+            data = mne.io.read_raw_cnt(filename, **kwargs)
+        elif dataformat == 'ctf':
+            data = mne.io.read_raw_ctf(filename, **kwargs)
+        elif dataformat == 'edf':
+            data = mne.io.read_raw_edf(filename, **kwargs)
+        elif dataformat == 'kit':
+            data = mne.io.read_raw_kit(filename, **kwargs)
+        elif dataformat == 'nicolet':
+            data = mne.io.read_raw_nicolet(filename, **kwargs)
+        elif dataformat == 'eeglab':
+            data = mne.io.read_raw_eeglab(filename, **kwargs)
+        elif dataformat == 'brainvision':                                            # CHECK NoOptionError: No option 'markerfile' in section: 'Common Infos' 
+            data = mne.io.read_raw_brainvision(filename, **kwargs)
+        elif dataformat == 'egi':
+            data = mne.io.read_raw_egi(filename, **kwargs)
+        elif dataformat == 'fif':
+            data = mne.io.read_raw_fif(filename, **kwargs)
+        else: 
+            print(['Failed extension not recognized for file: ', filename])           # CHECK throw error here    
+      
+        if not data.info['sfreq'] == 100:
+            print('Warning: Sampling frequency is not 100. Consider resampling')     # CHECK implement automatic resampling
+            
+        if not 'verbose' in  kwargs: print('loaded header ' + filename);
+        
+        return data
+    
+    
+    def trim_channels(self,data, channels):
+        print(data.ch_names)
+    #    channels dict should look like this:
+    #            channels = dict({'EOG' :'EOG',
+    #                    'VEOG':'EOG',
+    #                    'HEOG':'EOG',
+    #                    'EMG' :'EMG',
+    #                    'EEG' :'EEG',
+    #                    'C3'  :'EEG',
+    #                    'C4'  :'EEG'})
+    
+        curr_ch = data.ch_names
+        to_drop = list(curr_ch)
+        # find EMG, take first
+        for ch in curr_ch:
+            if ch in channels.keys():
+                if channels[ch] == 'EMG': 
+                    to_drop.remove(ch)
+                    data.rename_channels(dict({ch:'EMG'}))
+                    break
+    #            
+        # find EOG, take first
+        for ch in curr_ch:
+            if ch in channels.keys():
+                if channels[ch] == 'EOG': 
+                    to_drop.remove(ch)
+                    data.rename_channels(dict({ch:'EOG'}))
+                    break
+        # find EEG, take first
+        for ch in curr_ch:
+            if ch in channels.keys():
+                if channels[ch] == 'EEG': 
+                    to_drop.remove(ch)
+                    data.rename_channels(dict({ch:'EEG'}))
+                    break
+                
+        data.drop_channels(to_drop)
+
+    def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000):
         """
         :param filename: loads the given eeg file
-        """        
-        header = tools.load_eeg_header(self.directory + filename, verbose='CRITICAL', preload=True)
-        tools.trim_channels(header, self.channels)
-        tools.check_for_normalization(header)
+        """
+        hypno  = self.load_hypnogram(self.directory + hypno_file)
+        header = self.load_eeg_header(self.directory + eeg_file, verbose='CRITICAL', preload=True)
+        self.trim_channels(header, self.channels)
+        self.check_for_normalization(header)
         eeg = np.array(header.to_data_frame())
-        eeg = eeg[:(len(eeg)/samp_per_epoch)*samp_per_epoch]     # remove left over to ensure len(data)%3000==0
-        eeg = tools.split_eeg(eeg,1,100)
-        return eeg
+        
+        sfreq = header.info['sfreq']
+        hypno_length = len(hypno)
+        eeg_length   = len(eeg)
+        
+        epoch_len = int(eeg_length / hypno_length / sfreq) 
+        samples_per_epoch = int(epoch_len * sfreq)
+        hypno_repeat = int(samples_per_epoch / chuck_size)
+        
+        hypno = np.repeat(hypno,hypno_repeat)
+        eeg = eeg[:(len(eeg)/samples_per_epoch)*samples_per_epoch]     # remove left over to ensure len(data)%3000==0
+        eeg = tools.split_eeg(eeg,chuck_size)
+        return eeg, hypno
         
         
     def shuffle_data(self):
@@ -128,7 +275,7 @@ class SleepDataset(Singleton):
             return self.data[start:], self.hypno[start:]
         
        
-    def load(self, sel = [], shuffle = False,  force_reload = False, flat = True):
+    def load(self, sel = [], shuffle = False,  force_reload = False, flat = True, chunk_size = 3000):
         """
         :param sel:          np.array with indices of files to load from the directory. Natural sorting.
         :param shuffle:      shuffle subjects or not
@@ -136,7 +283,7 @@ class SleepDataset(Singleton):
         :param flat:         select if data will be returned in a flat list or a list per subject
         """
         
-        if self.loaded == True and force_reload == False and np.array_equal(sel, self.selection)==True:
+        if self.loaded == True and chunk_size==self.chunk_size and force_reload == False and np.array_equal(sel, self.selection)==True:
             print('Getting Dataset')
             if shuffle == True:
                 self.shuffle_data()
@@ -154,6 +301,7 @@ class SleepDataset(Singleton):
         self.data = list()
         self.hypno = list()  
         self.selection = sel    
+        self.chunk_size = chunk_size
         self.rng = random.RandomState(seed=23)
     
         # check hypno_filenames
@@ -169,23 +317,19 @@ class SleepDataset(Singleton):
             
         # select slice
         if sel==[]: sel = range(len(self.hypno_files))
-        self.hypno_files = map(self.hypno_files.__getitem__, sel)
-        self.eeg_files   = map(self.eeg_files.__getitem__, sel)
+        self.hypno_files = list(map(self.hypno_files.__getitem__, sel))
+        self.eeg_files   = list(map(self.eeg_files.__getitem__, sel))
         self.shuffle_index = list(sel);
         self.subjects = zip(self.eeg_files,self.hypno_files)
 
-        # load Hypno files
-        for i in range(len(self.hypno_files)):
-            self.curr_hypno = tools.load_hypnogram(self.directory + self.hypno_files[i])
-            self.curr_hypno = np.repeat(self.curr_hypno,30)
-            self.hypno.append(self.curr_hypno)
-            
-        # load EEG files
+           
+        # load EEG and adapt Hypno files
         for i in range(len(self.eeg_files)):
-            eeg = self.load_eeg(self.eeg_files[i], samp_per_epoch=3000)
-            if(len(eeg) != len(self.hypno[i])):
-                print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(self.hypno[i])))
+            eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_size)
+            if(len(eeg) != len(curr_hypno)):
+                print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(curr_hypno)))
             self.data.append(eeg)
+            self.hypno.append(curr_hypno)
             
         self.loaded = True
         
