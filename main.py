@@ -46,14 +46,15 @@ train_data = np.array(train_data,'float32')
 train_target = np.array(train_target,'int32').squeeze()
 test_data = np.array(test_data,'float32')
 test_target = np.array(test_target,'int32').squeeze()
-signals = train_data[0:2,:]
-start=time.time()
-train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]),tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
-test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
+signals = train_data[100:102,:,0]
+
+#train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]),tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
+#test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
 #train_data =  tools.feat_eeg(train_data[:,:,0])
 #test_data  =  tools.feat_eeg(test_data[:,:,0])
-print(time.time()-start)
 
+train_data =  tools.get_freqs(train_data[:,:,0],50)
+test_data  =  tools.get_freqs(test_data[:,:,0], 50)
 
 ## use this for freq data if more than 1 channel used
 #test_data = test_data.reshape((-1,test_data.shape[-1]*test_data.shape[-2]),order='F')
@@ -94,17 +95,16 @@ test_target [test_target==8]=6
 #%%
 def main():
     batch_size = 64
-    neurons = [3,5,10,15,25,50]
-    layers = 2
+    nneurons = [50]
+    layers = 3
     epochs= 150
     clipping = 25
     decay = 1e-5
-    cutoff = 10
+    cutoff = 50
     comment = 'LSTM-freq-1s-1ch-eeg-emg feats'
     link = L.LSTM
     gpu=-1
-    for neurons in neurons:
-        print(str(neurons) + ': '+ str(runRNN(neurons, layers, epochs, clipping, decay, cutoff, link, gpu, batch_size, comment)))
+    result  = [str(neurons) + ': '+ str(runRNN(neurons, layers, epochs, clipping, decay, cutoff, link, gpu, batch_size, comment)) for neurons in nneurons]
     
 #%% training routine
 # get data

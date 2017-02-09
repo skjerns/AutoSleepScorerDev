@@ -213,12 +213,12 @@ def get_freqs (signals, nbins=0):
     """
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
     sfreq = 100.0
-    if nbins == 0: nbins = sfreq/2
+    if nbins == 0: nbins = int(sfreq/2)
     
     nsamp = float(signals.shape[1])
     assert nsamp/2 >= nbins, 'more bins than fft results' 
     
-    feats = np.zeros((signals.shape[0],nbins),dtype='float32')
+    feats = np.zeros((int(signals.shape[0]),nbins),dtype='float32')
     w = (fft(signals,axis=1)).real
     for i in np.arange(nbins):
         feats[:,i] =  np.sum(np.abs(w[:,np.arange(i*nsamp/sfreq,(i+1)*nsamp/sfreq, dtype=int)]),axis=1)
