@@ -44,7 +44,7 @@ class SleepDataset(Singleton):
         :param dirlist: a directory string. yes it´s not a list yet.
         """
         if self.loaded == True:
-            print("Data already loaded. To reload add parameter force_reload=True")
+            print("Data already loaded.")
         else:
             self.data = list()
             self.hypno = list()  
@@ -193,11 +193,15 @@ class SleepDataset(Singleton):
         """
         :param filename: loads the given eeg file
         """
+        
         hypno  = self.load_hypnogram(self.directory + hypno_file)
-        header = self.load_eeg_header(self.directory + eeg_file, verbose='CRITICAL', preload=True)
+        header = self.load_eeg_header(self.directory + eeg_file, verbose='WARNING', preload=True)
         self.trim_channels(header, self.channels)
         self.check_for_normalization(header)
-        eeg = np.array(header.to_data_frame())
+        
+        mne.set_log_level(verbose=False)  # to get rid of the annoying 'convert to float64'
+        eeg = np.array(header.to_data_frame().reindex_axis(['EEG','EOG','EMG'],axis=1))
+        mne.set_log_level(verbose=True)
         
         sfreq = header.info['sfreq']
         hypno_length = len(hypno)

@@ -7,18 +7,116 @@ Created on Tue Dec  6 13:33:45 2016
 These are tools for the AutoSleepScorer.
 """
 
-import mne.io
 import csv
 import numpy as np
 import os.path
 #import pyfftw
 from scipy import fft
+from scipy import stats
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.utils import shuffle
 import json
 import os
 import re
 
+def future(signals, fsteps):
+    if signals.ndim == 1: signals = np.expand_dims(signals,0) 
+    if signals.ndim == 2: signals = np.expand_dims(signals,2) 
+    nsamp = signals.shape[1]
+    new_signals = np.zeros((signals.shape[0],signals.shape[1]*(fsteps+1), signals.shape[2]))
+    for i in np.arange(fsteps+1):
+        print(new_signals.shape)
+        new_signals[:,i*nsamp:(i+1)*nsamp,:] = np.roll(signals[:,:,:],-i,axis=0)
+    return new_signals.squeeze() if new_signals.shape[0]==1 or new_signals.shape[2]==1 else new_signals
+
+def feat_eeg(signals):
+    """
+    calculate the relative power as defined by Leangkvist (2012),
+    assuming signal is recorded with 100hz
+    """
+    if signals.ndim == 1: signals = np.expand_dims(signals,0)
+    
+    sfreq = 100.0
+    nsamp = float(signals.shape[1])
+    feats = np.zeros((signals.shape[0],7),dtype='float32')
+    # 5 FEATURE for freq babnds
+    w = (fft(signals,axis=1)).real
+    delta = np.sum(np.abs(w[:,np.arange(0.5*nsamp/sfreq,4*nsamp/sfreq, dtype=int)]),axis=1)
+    theta = np.sum(np.abs(w[:,np.arange(4*nsamp/sfreq,8*nsamp/sfreq, dtype=int)]),axis=1)
+    alpha = np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,13*nsamp/sfreq, dtype=int)]),axis=1)
+    beta  = np.sum(np.abs(w[:,np.arange(13*nsamp/sfreq,20*nsamp/sfreq, dtype=int)]),axis=1)
+    gamma = np.sum(np.abs(w[:,np.arange(20*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),axis=1)   # only until 50, because hz=100
+    sum_abs_pow = delta + theta + alpha + beta + gamma
+    feats[:,0] = delta /sum_abs_pow
+    feats[:,1] = theta /sum_abs_pow
+    feats[:,2] = alpha /sum_abs_pow
+    feats[:,3] = beta  /sum_abs_pow
+    feats[:,4] = gamma /sum_abs_pow
+    feats[:,5] = stats.kurtosis(signals,fisher=False,axis=1)        # kurtosis
+    feats[:,6] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+    return np.nan_to_num(feats)
+
+def feat_eog(signals):
+    """
+    calculate the EMG median as defined by Leangkvist (2012),
+    """
+    if signals.ndim == 1: signals = np.expand_dims(signals,0)
+    sfreq = 100.0
+    nsamp = signals.shape[1]
+    feats = np.zeros((signals.shape[0],8),dtype='float32')
+    w = (fft(signals,axis=1)).real
+    f0 = np.sum(np.abs(w[:,np.arange(0*nsamp/sfreq,0.5*nsamp/sfreq, dtype=int)]),axis=1)  # ratio of high freq to total motor
+    f1 = np.sum(np.abs(w[:,np.arange(0.5*nsamp/sfreq,1.5*nsamp/sfreq, dtype=int)]),axis=1)
+    f2 = np.sum(np.abs(w[:,np.arange(1.5*nsamp/sfreq,2*nsamp/sfreq, dtype=int)]),axis=1)  
+    f3 = np.sum(np.abs(w[:,np.arange(2*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),axis=1)  
+    sum_abs_pow = f0+f1+f2+f3
+    feats[:,0] = f0 / sum_abs_pow
+    feats[:,1] = f1 / sum_abs_pow
+    feats[:,2] = f2 / sum_abs_pow
+    feats[:,3] = np.median(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    # median freq
+    feats[:,4] = np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    #  mean freq
+    feats[:,5] = np.std(signals, axis=1)    #  std freq
+    feats[:,6] = stats.kurtosis(signals,fisher=False,axis=1) 
+    feats[:,7] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+    return np.nan_to_num(feats)
+
+def feat_emg(signals):
+    """
+    calculate the EMG median as defined by Leangkvist (2012),
+    """
+    if signals.ndim == 1: signals = np.expand_dims(signals,0)
+    sfreq = 100.0
+    nsamp = signals.shape[1]
+    feats = np.zeros((signals.shape[0],7),dtype='float32')
+    w = (fft(signals,axis=1)).real
+    emg = np.sum(np.abs(w[:,np.arange(12.5*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)
+    feats[:,0] = emg / np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)  # ratio of high freq to total motor
+    feats[:,1] = np.median(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    # median freq
+    feats[:,2] = np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    #  mean freq
+    feats[:,3] = np.std(signals, axis=1)    #  std freq
+    feats[:,4] = stats.kurtosis(signals,fisher=False,axis=1) 
+    feats[:,6] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+    return np.nan_to_num(feats)
+
+
+def feat_emgmedianfreq(signals):
+    """
+    calculate the EMG median as defined by Leangkvist (2012),
+    """
+    if signals.ndim == 1: signals = np.expand_dims(signals,0)
+    return np.median(abs(signals),axis=1)
+
+
+def get_features(data):
+    """
+    returns a vector with extraced features
+    :param data: datapoints x samples x dimensions (dimensions: EEG,EOG,EMG)
+    """
+#    assert(ndims=3)
+    for i in np.arange(data.shape[2]):
+        
+        pass
+    
 
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
@@ -46,7 +144,6 @@ def append_json(json_filename, dic):
         f.write('\n')    
 
 def memory():
-    import os
     from wmi import WMI
     w = WMI('.')
     result = w.query("SELECT WorkingSet FROM Win32_PerfRawData_PerfProc_Process WHERE IDProcess=%d" % os.getpid())
@@ -66,14 +163,19 @@ def shuffle_lists(*args,**options):
      """
      return shuffle(*args,**options)
     
-
     
+def epoch_voting(Y, chunk_size):
+    
+    
+    Y_new = Y.copy()
+    
+    for i in range(1+len(Y_new)/chunk_size):
+        epoch = Y_new[i*chunk_size:(i+1)*chunk_size]
+        if len(epoch) != 0: winner = np.bincount(epoch).argmax()
+        Y_new[i*chunk_size:(i+1)*chunk_size] = winner              
+    return Y_new
 
         
-    
-
-#    return data     no need for return as data is immutable
-
 
 def split_eeg(df, chunk_length):
     splits = int(len(df)/( chunk_length ))
