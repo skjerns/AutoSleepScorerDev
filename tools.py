@@ -20,14 +20,20 @@ import os
 import re
 
 def future(signals, fsteps):
-    if signals.ndim == 1: signals = np.expand_dims(signals,0) 
+    """
+    adds fsteps points of the future to the signal
+    :param signals: 2D or 3D signals
+    :param fsteps: how many future steps should be added to each data point
+    """
+    assert signals.shape[0] > fsteps, 'Future steps must be smaller than number of datapoints'
     if signals.ndim == 2: signals = np.expand_dims(signals,2) 
     nsamp = signals.shape[1]
     new_signals = np.zeros((signals.shape[0],signals.shape[1]*(fsteps+1), signals.shape[2]))
     for i in np.arange(fsteps+1):
         print(new_signals.shape)
         new_signals[:,i*nsamp:(i+1)*nsamp,:] = np.roll(signals[:,:,:],-i,axis=0)
-    return new_signals.squeeze() if new_signals.shape[0]==1 or new_signals.shape[2]==1 else new_signals
+    return new_signals.squeeze() if new_signals.shape[2]==1 else new_signals
+
 
 def feat_eeg(signals):
     """
@@ -126,17 +132,20 @@ def jsondict2csv(json_file, csv_file):
     
     key_set = set()
     dict_list = list()
-    with open(json_file) as f:
-        for line in f:
-            dic = json.loads(line)
-            map(key_set.add,dic.keys())
-            dict_list.append(dic)
-    keys = list(sorted(key_set, key = natural_key))
+    try:
+        with open(json_file) as f:
+            for line in f:
+                dic = json.loads(line)
+                map(key_set.add,dic.keys())
+                dict_list.append(dic)
+        keys = list(sorted(key_set, key = natural_key))
     
-    with open(csv_file, 'wb') as f:
-        w = csv.DictWriter(f, keys, delimiter=';')
-        w.writeheader()
-        w.writerows(dict_list)
+        with open(csv_file, 'wb') as f:
+            w = csv.DictWriter(f, keys, delimiter=';')
+            w.writeheader()
+            w.writerows(dict_list)
+    except IOError:
+        print('could not convert to csv-file. ')
     
 def append_json(json_filename, dic):
     with open(json_filename, 'a') as f:
@@ -185,16 +194,38 @@ def split_eeg(df, chunk_length):
     return data
     
     
-def get_freq_bands (epoch):
-
+def get_freq_bands (epoch): # DEPRECATED
+    print('get_freq_bands is deprecated, use get_freqs')
     w = (fft(epoch,axis=0)).real
     w = w[:len(w)/2]
     w = np.split(w,50)
     for i in np.arange(50):
         w[i] = np.mean(w[i],axis=0)
     
-    return np.array(np.sqrt(np.power(w,2)))
+    return np.array(np.abs(w))
+
+
+
+def get_freqs (signals, nbins=0):
+    """ extracts relative fft frequencies and bins them in n bins
+    :param signals: 1D or 2D signals
+    :param nbins:  number of bins used as output (default: maximum possible)
+    """
+    if signals.ndim == 1: signals = np.expand_dims(signals,0)
+    sfreq = 100.0
+    if nbins == 0: nbins = sfreq/2
     
+    nsamp = float(signals.shape[1])
+    assert nsamp/2 >= nbins, 'more bins than fft results' 
+    
+    feats = np.zeros((signals.shape[0],nbins),dtype='float32')
+    w = (fft(signals,axis=1)).real
+    for i in np.arange(nbins):
+        feats[:,i] =  np.sum(np.abs(w[:,np.arange(i*nsamp/sfreq,(i+1)*nsamp/sfreq, dtype=int)]),axis=1)
+    sum_abs_pow = np.sum(feats,axis=1)
+    feats = (feats.T / sum_abs_pow).T
+    return feats
+       
 
 print ('loaded tools.py')
     
