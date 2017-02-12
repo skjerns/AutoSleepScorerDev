@@ -18,7 +18,7 @@ class Analysis(object):
 
     def predict(self, supervised_data):
         """
-        Return Y and T
+        Return predicted Y and T
         :param supervised_data: SupervisedData object
         """
         
@@ -30,11 +30,13 @@ class Analysis(object):
         T = []
         for data in supervised_data:
             x = Variable(self.xp.asarray(data[0]), True)
-            Y.append(np.argmax(self.model.predict(x),axis=1))
+            Y.append(self.xp.argmax(self.model.predict(x),axis=1))
             T.append(data[1])
-            
-        Y = np.squeeze(np.asarray(Y))
-        T = np.squeeze(np.asarray(T))
+
+        Y = self.xp.squeeze(self.xp.asarray(Y, dtype=self.xp.float32))
+        T = self.xp.squeeze(self.xp.asarray(T))
+        Y = cuda.to_cpu(Y)
+        T = cuda.to_cpu(T)
         Y = Y.ravel(order='F')
         T = T.ravel(order='F')
         self.Y = Y
