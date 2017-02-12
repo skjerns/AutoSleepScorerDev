@@ -19,18 +19,33 @@ import json
 import os
 import re
 
+
+def normalize(signals):
+    """
+    :param signals: 1D, 2D or 3D signals
+    returns each element to have mean 0
+    """
+    if signals.ndim == 1: signals = np.expand_dims(signals,0) 
+    if signals.ndim == 2: signals = np.expand_dims(signals,2)
+    new_signals = np.zeros(signals.shape, dtype=np.int32)
+    for i in np.arange(signals.shape[2]):
+        new_signals[:,:,i] = np.subtract(signals[:,:,i].T,np.mean(signals[:,:,i],axis=1)).T
+        
+    return new_signals.squeeze() if new_signals.shape[2]==1 else new_signals
+
+
 def future(signals, fsteps):
     """
     adds fsteps points of the future to the signal
     :param signals: 2D or 3D signals
     :param fsteps: how many future steps should be added to each data point
     """
+    if fsteps==0: return signals
     assert signals.shape[0] > fsteps, 'Future steps must be smaller than number of datapoints'
     if signals.ndim == 2: signals = np.expand_dims(signals,2) 
     nsamp = signals.shape[1]
-    new_signals = np.zeros((signals.shape[0],signals.shape[1]*(fsteps+1), signals.shape[2]))
+    new_signals = np.zeros((signals.shape[0],signals.shape[1]*(fsteps+1), signals.shape[2]),dtype=np.float32)
     for i in np.arange(fsteps+1):
-        print(new_signals.shape)
         new_signals[:,i*nsamp:(i+1)*nsamp,:] = np.roll(signals[:,:,:],-i,axis=0)
     return new_signals.squeeze() if new_signals.shape[2]==1 else new_signals
 
@@ -62,29 +77,30 @@ def feat_eeg(signals):
     feats[:,6] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
     return np.nan_to_num(feats)
 
+
 def feat_eog(signals):
     """
-    calculate the EMG median as defined by Leangkvist (2012),
+    calculate the EOG features
+    :param signals: 1D or 2D signals
     """
+
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
     sfreq = 100.0
     nsamp = signals.shape[1]
-    feats = np.zeros((signals.shape[0],8),dtype='float32')
-    w = (fft(signals,axis=1)).real
-    f0 = np.sum(np.abs(w[:,np.arange(0*nsamp/sfreq,0.5*nsamp/sfreq, dtype=int)]),axis=1)  # ratio of high freq to total motor
-    f1 = np.sum(np.abs(w[:,np.arange(0.5*nsamp/sfreq,1.5*nsamp/sfreq, dtype=int)]),axis=1)
-    f2 = np.sum(np.abs(w[:,np.arange(1.5*nsamp/sfreq,2*nsamp/sfreq, dtype=int)]),axis=1)  
-    f3 = np.sum(np.abs(w[:,np.arange(2*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),axis=1)  
-    sum_abs_pow = f0+f1+f2+f3
-    feats[:,0] = f0 / sum_abs_pow
-    feats[:,1] = f1 / sum_abs_pow
-    feats[:,2] = f2 / sum_abs_pow
-    feats[:,3] = np.median(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    # median freq
-    feats[:,4] = np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    #  mean freq
-    feats[:,5] = np.std(signals, axis=1)    #  std freq
-    feats[:,6] = stats.kurtosis(signals,fisher=False,axis=1) 
-    feats[:,7] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+#    w = (fft(signals,axis=1)).real
+        
+    feats = np.zeros((signals.shape[0],9),dtype='float32')
+    feats[:,0] = np.max(signals, axis=1)    #PAV
+    feats[:,1] = np.min(signals, axis=1)    #VAV   
+    feats[:,2] = np.argmax(signals, axis=1) #PAP
+    feats[:,3] = np.argmin(signals, axis=1) #VAP
+    feats[:,4] = np.sum(np.abs(signals), axis=1)/ np.mean(np.sum(np.abs(signals), axis=1)) # AUC
+    feats[:,6] = np.sum(((np.roll(np.sign(signals), 1,axis=1) - np.sign(signals)) != 0).astype(int)) #TVC
+    feats[:,7] = np.std(signals, axis=1) #STD/VAR
+    feats[:,8] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+    
     return np.nan_to_num(feats)
+
 
 def feat_emg(signals):
     """
