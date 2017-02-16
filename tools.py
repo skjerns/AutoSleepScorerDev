@@ -19,6 +19,15 @@ import json
 import os
 import re
 
+def zscore(x_train, x_test, meanV=[], stdV=[], flat=False):
+    """
+        Normalization of x_train
+    """ 
+    if meanV == []: meanV = np.mean(x_train, axis = None if flat else 0) # vector of mean values
+    if stdV == []:  stdV  = np.std(x_train, axis = None if flat else 0)  # vector of standard deviation values
+    x_train_norm = (x_train-meanV)/stdV
+    x_test_norm =  (x_test-meanV)/stdV
+    return x_train_norm, x_test_norm
 
 def normalize(signals):
     """
@@ -86,18 +95,18 @@ def feat_eog(signals):
 
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
     sfreq = 100.0
-    nsamp = signals.shape[1]
+    nsamp = float(signals.shape[1])
 #    w = (fft(signals,axis=1)).real
         
-    feats = np.zeros((signals.shape[0],9),dtype='float32')
+    feats = np.zeros((signals.shape[0],8),dtype='float32')
     feats[:,0] = np.max(signals, axis=1)    #PAV
     feats[:,1] = np.min(signals, axis=1)    #VAV   
     feats[:,2] = np.argmax(signals, axis=1) #PAP
     feats[:,3] = np.argmin(signals, axis=1) #VAP
     feats[:,4] = np.sum(np.abs(signals), axis=1)/ np.mean(np.sum(np.abs(signals), axis=1)) # AUC
-    feats[:,6] = np.sum(((np.roll(np.sign(signals), 1,axis=1) - np.sign(signals)) != 0).astype(int)) #TVC
-    feats[:,7] = np.std(signals, axis=1) #STD/VAR
-    feats[:,8] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+    feats[:,5] = np.sum(((np.roll(np.sign(signals), 1,axis=1) - np.sign(signals)) != 0).astype(int),axis=1) #TVC
+    feats[:,6] = np.std(signals, axis=1) #STD/VAR
+    feats[:,7] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
     
     return np.nan_to_num(feats)
 
@@ -108,8 +117,8 @@ def feat_emg(signals):
     """
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
     sfreq = 100.0
-    nsamp = signals.shape[1]
-    feats = np.zeros((signals.shape[0],7),dtype='float32')
+    nsamp = float(signals.shape[1])
+    feats = np.zeros((signals.shape[0],6),dtype='float32')
     w = (fft(signals,axis=1)).real
     emg = np.sum(np.abs(w[:,np.arange(12.5*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)
     feats[:,0] = emg / np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)  # ratio of high freq to total motor
@@ -117,7 +126,7 @@ def feat_emg(signals):
     feats[:,2] = np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    #  mean freq
     feats[:,3] = np.std(signals, axis=1)    #  std freq
     feats[:,4] = stats.kurtosis(signals,fisher=False,axis=1) 
-    feats[:,6] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+    feats[:,5] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
     return np.nan_to_num(feats)
 
 
