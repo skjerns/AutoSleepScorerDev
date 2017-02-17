@@ -68,7 +68,7 @@ def feat_eeg(signals):
     
     sfreq = 100.0
     nsamp = float(signals.shape[1])
-    feats = np.zeros((signals.shape[0],7),dtype='float32')
+    feats = np.zeros((signals.shape[0],8),dtype='float32')
     # 5 FEATURE for freq babnds
     w = (fft(signals,axis=1)).real
     delta = np.sum(np.abs(w[:,np.arange(0.5*nsamp/sfreq,4*nsamp/sfreq, dtype=int)]),axis=1)
@@ -82,8 +82,10 @@ def feat_eeg(signals):
     feats[:,2] = alpha /sum_abs_pow
     feats[:,3] = beta  /sum_abs_pow
     feats[:,4] = gamma /sum_abs_pow
-    feats[:,5] = stats.kurtosis(signals,fisher=False,axis=1)        # kurtosis
-    feats[:,6] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+    feats[:,5] = np.log10(stats.kurtosis(signals,fisher=False,axis=1))        # kurtosis
+    feats[:,6] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
+    #feats[:,7] = np.polynomial.polynomial.polyfit(np.log(f[np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]), np.log(w[0,np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),1)
+    feats[:,7] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5)
     return np.nan_to_num(feats)
 
 
@@ -96,17 +98,29 @@ def feat_eog(signals):
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
     sfreq = 100.0
     nsamp = float(signals.shape[1])
-#    w = (fft(signals,axis=1)).real
-        
-    feats = np.zeros((signals.shape[0],8),dtype='float32')
-    feats[:,0] = np.max(signals, axis=1)    #PAV
-    feats[:,1] = np.min(signals, axis=1)    #VAV   
-    feats[:,2] = np.argmax(signals, axis=1) #PAP
-    feats[:,3] = np.argmin(signals, axis=1) #VAP
-    feats[:,4] = np.sum(np.abs(signals), axis=1)/ np.mean(np.sum(np.abs(signals), axis=1)) # AUC
-    feats[:,5] = np.sum(((np.roll(np.sign(signals), 1,axis=1) - np.sign(signals)) != 0).astype(int),axis=1) #TVC
-    feats[:,6] = np.std(signals, axis=1) #STD/VAR
-    feats[:,7] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+    w = (fft(signals,axis=1)).real   
+    feats = np.zeros((signals.shape[0],15),dtype='float32')
+    delta = np.sum(np.abs(w[:,np.arange(0.5*nsamp/sfreq,4*nsamp/sfreq, dtype=int)]),axis=1)
+    theta = np.sum(np.abs(w[:,np.arange(4*nsamp/sfreq,8*nsamp/sfreq, dtype=int)]),axis=1)
+    alpha = np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,13*nsamp/sfreq, dtype=int)]),axis=1)
+    beta  = np.sum(np.abs(w[:,np.arange(13*nsamp/sfreq,20*nsamp/sfreq, dtype=int)]),axis=1)
+    gamma = np.sum(np.abs(w[:,np.arange(20*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),axis=1)   # only until 50, because hz=100
+    sum_abs_pow = delta + theta + alpha + beta + gamma
+    feats[:,0] = delta /sum_abs_pow
+    feats[:,1] = theta /sum_abs_pow
+    feats[:,2] = alpha /sum_abs_pow
+    feats[:,3] = beta  /sum_abs_pow
+    feats[:,4] = gamma /sum_abs_pow
+    feats[:,5] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5) #smean
+    feats[:,6] = np.max(signals, axis=1)    #PAV
+    feats[:,7] = np.min(signals, axis=1)    #VAV   
+    feats[:,8] = np.argmax(signals, axis=1) #PAP
+    feats[:,9] = np.argmin(signals, axis=1) #VAP
+    feats[:,10] = np.sum(np.abs(signals), axis=1)/ np.mean(np.sum(np.abs(signals), axis=1)) # AUC
+    feats[:,11] = np.sum(((np.roll(np.sign(signals), 1,axis=1) - np.sign(signals)) != 0).astype(int),axis=1) #TVC
+    feats[:,12] = np.log10(np.std(signals, axis=1)) #STD/VAR
+    feats[:,13] = np.log10(stats.kurtosis(signals,fisher=False,axis=1))       # kurtosis
+    feats[:,14] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
     
     return np.nan_to_num(feats)
 
@@ -118,15 +132,28 @@ def feat_emg(signals):
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
     sfreq = 100.0
     nsamp = float(signals.shape[1])
-    feats = np.zeros((signals.shape[0],6),dtype='float32')
-    w = (fft(signals,axis=1)).real
+    w = (fft(signals,axis=1)).real   
+    feats = np.zeros((signals.shape[0],13),dtype='float32')
+    delta = np.sum(np.abs(w[:,np.arange(0.5*nsamp/sfreq,4*nsamp/sfreq, dtype=int)]),axis=1)
+    theta = np.sum(np.abs(w[:,np.arange(4*nsamp/sfreq,8*nsamp/sfreq, dtype=int)]),axis=1)
+    alpha = np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,13*nsamp/sfreq, dtype=int)]),axis=1)
+    beta  = np.sum(np.abs(w[:,np.arange(13*nsamp/sfreq,20*nsamp/sfreq, dtype=int)]),axis=1)
+    gamma = np.sum(np.abs(w[:,np.arange(20*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),axis=1)   # only until 50, because hz=100
+    sum_abs_pow = delta + theta + alpha + beta + gamma
+    feats[:,0] = delta /sum_abs_pow
+    feats[:,1] = theta /sum_abs_pow
+    feats[:,2] = alpha /sum_abs_pow
+    feats[:,3] = beta  /sum_abs_pow
+    feats[:,4] = gamma /sum_abs_pow
+    feats[:,5] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5) #smean
     emg = np.sum(np.abs(w[:,np.arange(12.5*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)
-    feats[:,0] = emg / np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)  # ratio of high freq to total motor
-    feats[:,1] = np.median(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    # median freq
-    feats[:,2] = np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    #  mean freq
-    feats[:,3] = np.std(signals, axis=1)    #  std freq
-    feats[:,4] = stats.kurtosis(signals,fisher=False,axis=1) 
-    feats[:,5] = -np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1)  # entropy.. yay, one line...
+    feats[:,6] = emg / np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)  # ratio of high freq to total motor
+    feats[:,7] = np.median(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    # median freq
+    feats[:,8] = np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    #  mean freq
+    feats[:,9] = np.std(signals, axis=1)    #  std 
+    feats[:,10] = np.mean(signals,axis=1)
+    feats[:,11] = np.log10(stats.kurtosis(signals,fisher=False,axis=1) )
+    feats[:,12] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
     return np.nan_to_num(feats)
 
 
