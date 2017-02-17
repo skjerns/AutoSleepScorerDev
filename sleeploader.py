@@ -41,13 +41,14 @@ class SleepDataset(Singleton):
 
     def __init__(self, directory):
         """
-        :param dirlist: a directory string. yes it´s not a list yet.
+        :param directory: a directory string. yes it´s not a list yet.
         """
         if self.loaded == True:
             print("Data already loaded.")
         else:
             self.data = list()
             self.hypno = list()  
+            
         if os.name != 'posix':
             self.directory = directory + '\\'
         else:
@@ -71,10 +72,12 @@ class SleepDataset(Singleton):
             print('WARNING: EEG channel missing')
         
         
-    def load_hypnogram(self, filename, dataformat = '', csv_delimiter='\t'):
+    def load_hypnogram(self, filename, dataformat = '', csv_delimiter='\t', mode='standard'):
         """
         returns an array with sleep stages
         :param filename: loads the given hypno file
+        :param mode: standard: just read first row, overwrite = if second row!=0,
+                     take that value, concatenate = add values together
         """
         dataformats = dict({
                             'txt' :'csv',
@@ -89,7 +92,18 @@ class SleepDataset(Singleton):
                 reader = csv.reader(csvfile, delimiter=csv_delimiter)
                 lhypno = []
                 for row in reader:
-                    lhypno.append(int(row[0]))
+                    if mode == 'standard':
+                        lhypno.append(int(row[0]))
+                        
+                    elif mode == 'overwrite':
+                        if int(row[1]) == 0:
+                            lhypno.append(int(row[0]))
+                        else:
+                            lhypno.append(8)
+                            #lhypno.append(int(row[1]))
+                            
+                    elif mode == 'concatecate':
+                        lhypno.append(int(x) for x in row)
         else:
             print('unkown hypnogram format. please use CSV with rows as epoch')        
 
@@ -189,12 +203,13 @@ class SleepDataset(Singleton):
                 
         data.drop_channels(to_drop)
 
+
     def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000):
         """
         :param filename: loads the given eeg file
         """
         
-        hypno  = self.load_hypnogram(self.directory + hypno_file)
+        hypno  = self.load_hypnogram(self.directory + hypno_file, mode = 'overwrite')
         header = self.load_eeg_header(self.directory + eeg_file, verbose='WARNING', preload=True)
         self.trim_channels(header, self.channels)
         self.check_for_normalization(header)
@@ -208,11 +223,11 @@ class SleepDataset(Singleton):
         eeg_length   = len(eeg)
         
         epoch_len = int(eeg_length / hypno_length / sfreq) 
-        samples_per_epoch = int(epoch_len * sfreq)
-        hypno_repeat = int(samples_per_epoch / chuck_size)
+        self.samples_per_epoch = int(epoch_len * sfreq)
+        self.hypno_repeat = int(self.samples_per_epoch / chuck_size)
         
-        hypno = np.repeat(hypno,hypno_repeat)
-        eeg = eeg[:(len(eeg)/samples_per_epoch)*samples_per_epoch]     # remove left over to ensure len(data)%3000==0
+        hypno = np.repeat(hypno,self.hypno_repeat)
+        eeg = eeg[:(len(eeg)/self.samples_per_epoch)*self.samples_per_epoch]     # remove left over to ensure len(data)%3000==0
         eeg = tools.split_eeg(eeg,chuck_size)
         return eeg, hypno
         
@@ -330,6 +345,7 @@ class SleepDataset(Singleton):
         # load EEG and adapt Hypno files
         for i in range(len(self.eeg_files)):
             eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_size)
+            print(len(eeg))
             if(len(eeg) != len(curr_hypno)):
                 print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(curr_hypno)))
             self.data.append(eeg)
