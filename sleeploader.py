@@ -31,9 +31,11 @@ class SleepDataset(Singleton):
                  'EOGmix':'EOG',
                 'VEOG':'EOG',
                 'HEOG':'EOG',
+                'RightEye':'EOG',
                 'EMG' :'EMG',
                 'EEG' :'EEG',
                 'C3'  :'EEG',
+                'C3A2'  :'EEG',
                 'C4'  :'EEG',
                 'C3A2':'EEG',
                 'EEG1':'EEG',
@@ -209,7 +211,7 @@ class SleepDataset(Singleton):
         :param filename: loads the given eeg file
         """
         
-        hypno  = self.load_hypnogram(self.directory + hypno_file, mode = 'overwrite')
+        hypno  = self.load_hypnogram(self.directory + hypno_file, mode = 'standard')
         header = self.load_eeg_header(self.directory + eeg_file, verbose='WARNING', preload=True)
         self.trim_channels(header, self.channels)
         self.check_for_normalization(header)
@@ -218,7 +220,7 @@ class SleepDataset(Singleton):
         eeg = np.array(header.to_data_frame().reindex_axis(['EEG','EOG','EMG'],axis=1))
         mne.set_log_level(verbose=True)
         
-        sfreq = header.info['sfreq']
+        sfreq = 100
         hypno_length = len(hypno)
         eeg_length   = len(eeg)
         
@@ -260,6 +262,19 @@ class SleepDataset(Singleton):
             return  [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
         else:
             return self.data, self.hypno
+        
+        
+    def get_train_intersub(self, split=30):
+        
+        data, target = self.get_train( split=split, flat=False)
+        train_data = np.array([])
+        train_target = np.empty([data[0][0].shape[0],0])
+        for pp,t in  zip(data,target):
+            end = int(len(pp)-len(pp)*(split/100.0))
+            print(end)
+            train_data   = np.append(train_data, pp[:end],axis=0)
+            train_target = np.append(train_target, t[:end],axis=0)
+        return train_data,train_target
         
         
     def get_train(self, split=30, flat=True):
@@ -341,11 +356,10 @@ class SleepDataset(Singleton):
         self.shuffle_index = list(sel);
         self.subjects = zip(self.eeg_files,self.hypno_files)
 
-           
+        print(self.eeg_files)   
         # load EEG and adapt Hypno files
         for i in range(len(self.eeg_files)):
             eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_size)
-            print(len(eeg))
             if(len(eeg) != len(curr_hypno)):
                 print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(curr_hypno)))
             self.data.append(eeg)
