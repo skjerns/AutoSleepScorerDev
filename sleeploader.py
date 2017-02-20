@@ -109,7 +109,7 @@ class SleepDataset(Singleton):
         else:
             print('unkown hypnogram format. please use CSV with rows as epoch')        
 
-        lhypno = np.array(lhypno).reshape(-1, 1)
+        lhypno = np.array(lhypno, dtype=np.int32).reshape(-1, 1)
         return lhypno   
         
     
@@ -217,20 +217,18 @@ class SleepDataset(Singleton):
         self.check_for_normalization(header)
         
         mne.set_log_level(verbose=False)  # to get rid of the annoying 'convert to float64'
-        eeg = np.array(header.to_data_frame().reindex_axis(['EEG','EOG','EMG'],axis=1))
+        eeg = np.array(header.to_data_frame().reindex_axis(['EEG','EOG','EMG'],axis=1), dtype=self.dtype)
         mne.set_log_level(verbose=True)
         
-        sfreq = 100
-        hypno_length = len(hypno)
-        eeg_length   = len(eeg)
+        sfreq     = header.info['sfreq']
+        hypno_len = len(hypno)
+        eeg_len   = len(eeg)
         
-        epoch_len = int(eeg_length / hypno_length / sfreq) 
+        epoch_len = int(eeg_len / hypno_len / sfreq) 
         self.samples_per_epoch = int(epoch_len * sfreq)
-        self.hypno_repeat = int(self.samples_per_epoch / chuck_size)
         
-        hypno = np.repeat(hypno,self.hypno_repeat)
+
         eeg = eeg[:(len(eeg)/self.samples_per_epoch)*self.samples_per_epoch]     # remove left over to ensure len(data)%3000==0
-        eeg = tools.split_eeg(eeg,chuck_size)
         return eeg, hypno
         
         
@@ -250,6 +248,7 @@ class SleepDataset(Singleton):
         if self.loaded == False: print('ERROR: Data not loaded yet')
         return self.data[self.shuffle_index.index(index)], self.hypno[self.shuffle_index.index(index)] # index.index(index), beautiful isn't it?? :)
         
+    
     def get_all_data(self, flat=True):
         """
         returns all data that is loaded
@@ -259,23 +258,53 @@ class SleepDataset(Singleton):
         if self.loaded == False: print('ERROR: Data not loaded yet')
             
         if flat == True:
-            return  [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
+            return  self._makeflat()
         else:
             return self.data, self.hypno
         
         
-    def get_train_intersub(self, split=30):
         
-        data, target = self.get_train( split=split, flat=False)
-        train_data = np.array([])
-        train_target = np.empty([data[0][0].shape[0],0])
-        for pp,t in  zip(data,target):
-            end = int(len(pp)-len(pp)*(split/100.0))
-            print(end)
-            train_data   = np.append(train_data, pp[:end],axis=0)
-            train_target = np.append(train_target, t[:end],axis=0)
-        return train_data,train_target
+    def get_intrasub(self, splits=3, test=1 ):
         
+        train_data = list()
+        train_target = list()
+        test_data = list()
+        test_target = list()
+        hypno_repeat = self.samples_per_epoch / self.chunk_len
+        
+        for eeg, hypno in zip(self.data, self.hypno):
+            per_split = len(eeg)/self.chunk_len/splits
+            choice = self.rng.permutation(splits)
+            tst = choice[0:test]  
+            trn = choice[test:]
+            for i in trn:
+                train_data.append(eeg.reshape([-1, self.chunk_len,3])[per_split*i:(per_split*(i+1))])
+                train_target.append(np.repeat(hypno, hypno_repeat)[per_split*i:(per_split*(i+1))])
+            for i in tst:
+                test_data.append(eeg.reshape([-1, self.chunk_len,3])[per_split*i:(per_split*(i+1))])
+                test_target.append(np.repeat(hypno, hypno_repeat)[per_split*i:(per_split*(i+1))])
+        return np.vstack(train_data), np.hstack(train_target), np.vstack(test_data), np.hstack(test_target)
+    
+    
+    
+    def get_test_intrasub(self, splits=3, test=1 ):
+        
+        test_data = list()
+        test_target = list()
+        hypno_repeat = self.samples_per_epoch / self.chunk_len
+        spl = np.arange(splits)
+        for eeg, hypno in zip(self.data, self.hypno):
+            per_split = len(eeg)/self.chunk_len/splits
+            choice = self.rng.choice(spl,test)
+            print per_split, choice
+            for i in choice:
+                print per_split*i,(per_split*(i+1)),i
+                test_data.append(eeg.reshape([-1, self.chunk_len,3])[per_split*i:(per_split*(i+1))])
+                test_target.append(np.repeat(hypno, hypno_repeat)[per_split*i:(per_split*(i+1))])
+            
+        return np.hstack(test_data), np.vstack(test_target)  
+    
+    
         
     def get_train(self, split=30, flat=True):
         """
@@ -288,10 +317,11 @@ class SleepDataset(Singleton):
         end = int(len(self.data)-len(self.data)*(split/100.0))
         
         if flat == True:
-            return  [item for sublist in self.data[:end] for item in sublist], [item for sublist in self.hypno[:end] for item in sublist]
+            return  self._makeflat(end=end)
         else:
             return self.data[:end], self.hypno[:end]
             
+        
         
     def get_test(self, split=30, flat=True):
         """
@@ -304,12 +334,29 @@ class SleepDataset(Singleton):
         start = int(len(self.data)-len(self.data)*(split/100.0))
         
         if flat == True:
-            return  [item for sublist in self.data[start:] for item in sublist], [item for sublist in self.hypno[start:] for item in sublist]
+             return  self._makeflat(start=start)
         else:
             return self.data[start:], self.hypno[start:]
         
+        
+    def _makeflat(self, start=None, end=None):     
+        eeg = list()
+        for sub in self.data[start:end]:
+            if len(sub) % self.chunk_len == 0:
+                eeg.append(sub.reshape([-1, self.chunk_len,3]))
+            else:
+                print('ERROR: Please choose a chunk length that is a factor of {}'.format(self.samples_per_epoch))
+                return [0,0]
+        hypno = list()
+        hypno_repeat = self.samples_per_epoch / self.chunk_len
+        
+        for sub in self.hypno[start:end]:
+            hypno.append(np.repeat(sub, hypno_repeat))
+        
+        return np.vstack(eeg), np.hstack(hypno)
        
-    def load(self, sel = [], shuffle = False,  force_reload = False, flat = True, chunk_size = 3000):
+        
+    def load(self, sel = [], shuffle = False,  force_reload = False, flat = None, chunk_len = 3000, dtype=np.float32):
         """
         :param sel:          np.array with indices of files to load from the directory. Natural sorting.
         :param shuffle:      shuffle subjects or not
@@ -317,14 +364,18 @@ class SleepDataset(Singleton):
         :param flat:         select if data will be returned in a flat list or a list per subject
         """
         
-        if self.loaded == True and chunk_size==self.chunk_size and force_reload == False and np.array_equal(sel, self.selection)==True:
+        self.chunk_len = chunk_len        
+        if self.loaded == True and force_reload == False and np.array_equal(sel, self.selection)==True:
             print('Getting Dataset')
             if shuffle == True:
                 self.shuffle_data()
             if flat == True:
-                return [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
+                return self._makeflat()
+            elif flat == False:
+                return self.data,self.hypno   
             else:
-                return self.data,self.hypno    
+                print('No return mode set. Just setting new chunk_len')
+                return
             
         elif force_reload==True:
             print('Reloading Dataset')
@@ -332,10 +383,10 @@ class SleepDataset(Singleton):
         else:
             print('Loading Dataset') 
             
+        self.dtype = dtype   
         self.data = list()
         self.hypno = list()  
         self.selection = sel    
-        self.chunk_size = chunk_size
         self.rng = random.RandomState(seed=23)
     
         # check hypno_filenames
@@ -346,7 +397,7 @@ class SleepDataset(Singleton):
         self.eeg_files = [s for s in os.listdir(self.directory) if s.endswith(('.vhdr','rec','edf'))]
         self.eeg_files = sorted(self.eeg_files, key = natural_key)
         
-        if len(self.hypno_files) != len(self.eeg_files): 
+        if len(self.hypno_files)  != len(self.eeg_files): 
             print('ERROR: Not the same number of Hypno and EEG files. Hypno: ' + str(len(self.hypno_files))+ ', EEG: ' + str(len(self.eeg_files)))
             
         # select slice
@@ -356,12 +407,11 @@ class SleepDataset(Singleton):
         self.shuffle_index = list(sel);
         self.subjects = zip(self.eeg_files,self.hypno_files)
 
-        print(self.eeg_files)   
         # load EEG and adapt Hypno files
         for i in range(len(self.eeg_files)):
-            eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_size)
-            if(len(eeg) != len(curr_hypno)):
-                print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(curr_hypno)))
+            eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_len)
+            if(len(eeg) != len(curr_hypno) * self.samples_per_epoch):
+                print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(curr_hypno)* self.samples_per_epoch))
             self.data.append(eeg)
             self.hypno.append(curr_hypno)
             
@@ -371,12 +421,10 @@ class SleepDataset(Singleton):
         if shuffle == True:
             self.shuffle_data()
             
-        
-
         # select if data will be returned in a flat list or a list per subject
         if flat == True:
             return  [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
-        else:
+        elif flat == False:
             return self.data,self.hypno
             
 print('loaded sleeploader.py')

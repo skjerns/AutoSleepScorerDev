@@ -63,7 +63,7 @@ class Analysis(object):
             
         if plot:
             plt.figure()
-            plt.imshow(conf_mat, cmap='jet')
+            plt.imshow(conf_mat, cmap='jet', interpolation='nearest')
             plt.xlabel('Predicted class')
             plt.ylabel('True class')
             plt.xticks(np.arange(nregressors))

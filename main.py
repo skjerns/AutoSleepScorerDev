@@ -6,7 +6,7 @@ main script for training/classifying
 """
 if not '__file__' in vars(): __file__= u'C:/Users/Simon/dropbox/Uni/Masterthesis/AutoSleepScorer/main.py'
 import os, sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+'/ANN3')
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+'/ANN')
 import chainer.links as L
 import numpy as np
 import datasets
@@ -19,6 +19,7 @@ from models.utilities import Classifier
 if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
 import tools
 import time
+import QRNN
 from sklearn import metrics
 from sklearn.preprocessing import scale
 import matplotlib
@@ -34,17 +35,17 @@ except IOError:
 
 #%%
 #def main():
-batch_size = 1280
-neurons = 10
+batch_size = 128
+neurons = 30
 layers = 3
-epochs= 150
+epochs= 200
 chunk_size = 3000
 clipping = 250
 decay = 1e-5
-cutoff = 3000
+cutoff = None
 future = 0
-comment = 'LSTM-testing-norm-3ch '
-comment = comment + raw_input('Comment? '+ comment)
+comment = 'LSTM-norm-3ch, new loader intrasub'
+#comment = comment + raw_input('Comment? '+ comment)
 link = L.LSTM
 gpu=-1
 
@@ -54,34 +55,35 @@ gpu=-1
 
 if os.name == 'posix':
     datadir  = '/home/simon/sleep/'
+    datadir  = '/home/simon/vinc/'
 else:
     datadir = 'c:\\sleep\\data\\'
-#    datadir = 'c:\\sleep\\vinc\\'
+#    datadir = 'C:\\sleep\\vinc\\brainvision\\'
 
 
     
-sleep = sleeploader.SleepDataset(datadir)
-selection = np.array(range(0,14)+range(33,50))
-#selection = np.array(range(0,14))
-#selection = np.array(range(2))
-#selection=[]
-sleep.load(selection, force_reload=False, shuffle=True, flat=True, chunk_size=chunk_size)
 
-train_data, train_target = sleep.get_train()
-test_data, test_target = sleep.get_test()
-train_data = np.array(train_data,'float32')[:,:,0]
-train_target = np.array(train_target,'int32').squeeze()
-test_data = np.array(test_data,'float32')[:,:,0]
-test_target = np.array(test_target,'int32').squeeze()
+sleep = sleeploader.SleepDataset(datadir)
+selection = np.append(np.arange(0,14).flatten(),np.arange(33,50).flatten())
+#selection = np.array(range(0,14))
+#selection = np.array(range(6))
+#selection=[]
+sleep.load(selection, force_reload=False, shuffle=True, flat=True, chunk_len=chunk_size)
+
+#train_data, train_target = sleep.get_train(flat=True)
+#test_data, test_target   = sleep.get_test(flat=True)
+
+train_data, train_target, test_data, test_target = sleep.get_intrasub()
 
 #test_data  = tools.normalize(test_data)
 #train_data = tools.normalize(train_data)
 
-#signals = train_data[100:103,:,1]
+signals = train_data[100:103,:,1]
 #d
 
-#train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
-#test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
+print('Extracting features')
+train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
+test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
 #
 #train_data =  tools.feat_eeg(train_data[:,:,0])
 #test_data  =  tools.feat_eeg(test_data[:,:,0])
@@ -89,18 +91,18 @@ test_target = np.array(test_target,'int32').squeeze()
 #train_data =   np.hstack([tools.get_freqs(train_data[:,:,0],50),tools.feat_eog(train_data[:,:,1])])
 #test_data  =   np.hstack([tools.get_freqs(test_data[:,:,0], 50),tools.feat_eog(test_data[:,:,1])])
 
-#train_data =  tools.future(train_data, future)
-#test_data  =  tools.future(test_data, future)
+train_data =  tools.future(train_data, future)
+test_data  =  tools.future(test_data, future)
 
 ## use this for freq data if more than 1 channel used
 #test_data = test_data.reshape((-1,test_data.shape[-1]*test_data.shape[-2]),order='F')
 #train_data = train_data.reshape((-1,train_data.shape[-1]*train_data.shape[-2]),order='F')
 
 # use this for 1D data if more than 1 channel used
-test_data = test_data.reshape((-1,1),order='C')
-train_data = train_data.reshape((-1,1),order='C')
-train_target = train_target.repeat(3000)
-test_target = test_target.repeat(3000)
+#test_data = test_data.reshape((-1,1),order='C')
+#train_data = train_data.reshape((-1,1),order='C')
+#train_target = train_target.repeat(3000)
+#test_target = test_target.repeat(3000)
 
 # 1D-Data
 #train_data = train_data.flatten()
@@ -121,7 +123,7 @@ test_target [test_target==8]=5
 #
 #train_target = np.repeat(train_target,3000)
 #test_target = np.repeat(test_target,3000)
-
+#asd
 
 ##### binary classification SWS<>Other
 #test_target [test_target==4]=3
@@ -137,11 +139,12 @@ test_target [test_target==8]=5
    
                      
 # normalize features
-train_data, test_data = normalization(train_data,test_data)
+train_data, test_data = tools.zscore(train_data,test_data)
 #del sleep.data
+
+if np.sum(np.isnan(train_data)) or np.sum(np.isnan(test_data)):print('Warning! NaNs detected')
 #%% training routine
-# get data
-#def runRNN(neurons, layers, epochs, clipping, decay, cutoff, link, gpu, batch_size, comment):
+
 starttime = time.time()
 training_data   = datasets.DynamicData(train_data, train_target, batch_size=batch_size)
 validation_data = datasets.DynamicData(test_data, test_target, batch_size=batch_size)

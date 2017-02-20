@@ -238,12 +238,6 @@ def epoch_voting(Y, chunk_size):
 
         
 
-def split_eeg(df, chunk_length):
-    splits = int(len(df)/( chunk_length ))
-    data = []
-    for i in np.arange(splits):
-        data.append(df[i*chunk_length:(i+1)*chunk_length])
-    return data
     
     
 def get_freq_bands (epoch): # DEPRECATED
