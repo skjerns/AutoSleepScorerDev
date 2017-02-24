@@ -223,7 +223,6 @@ class SleepDataset(Singleton):
         sfreq     = header.info['sfreq']
         hypno_len = len(hypno)
         eeg_len   = len(eeg)
-        
         epoch_len = int(eeg_len / hypno_len / sfreq) 
         self.samples_per_epoch = int(epoch_len * sfreq)
         
@@ -286,25 +285,6 @@ class SleepDataset(Singleton):
         return np.vstack(train_data), np.hstack(train_target), np.vstack(test_data), np.hstack(test_target)
     
     
-    
-    def get_test_intrasub(self, splits=3, test=1 ):
-        
-        test_data = list()
-        test_target = list()
-        hypno_repeat = self.samples_per_epoch / self.chunk_len
-        spl = np.arange(splits)
-        for eeg, hypno in zip(self.data, self.hypno):
-            per_split = len(eeg)/self.chunk_len/splits
-            choice = self.rng.choice(spl,test)
-            print per_split, choice
-            for i in choice:
-                print per_split*i,(per_split*(i+1)),i
-                test_data.append(eeg.reshape([-1, self.chunk_len,3])[per_split*i:(per_split*(i+1))])
-                test_target.append(np.repeat(hypno, hypno_repeat)[per_split*i:(per_split*(i+1))])
-            
-        return np.hstack(test_data), np.vstack(test_target)  
-    
-    
         
     def get_train(self, split=30, flat=True):
         """
@@ -361,7 +341,7 @@ class SleepDataset(Singleton):
         :param sel:          np.array with indices of files to load from the directory. Natural sorting.
         :param shuffle:      shuffle subjects or not
         :param force_reload: reload data even if already loaded
-        :param flat:         select if data will be returned in a flat list or a list per subject
+        :param flat:         select if data will be returned in a flat array or a list per subject
         """
         
         self.chunk_len = chunk_len        
@@ -421,9 +401,9 @@ class SleepDataset(Singleton):
         if shuffle == True:
             self.shuffle_data()
             
-        # select if data will be returned in a flat list or a list per subject
+        # select if data will be returned in a flat array or a list per subject
         if flat == True:
-            return  [item for sublist in self.data for item in sublist], [item for sublist in self.hypno for item in sublist]
+            return  self._makeflat()
         elif flat == False:
             return self.data,self.hypno
             

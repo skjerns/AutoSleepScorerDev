@@ -19,15 +19,17 @@ import json
 import os
 import re
 
-def zscore(x_train, x_test, meanV=[], stdV=[], flat=False):
+def zscore(*arrays):
     """
-        Normalization of x_train
+        Normalization all arrays with values from the first array.
     """ 
-    if meanV == []: meanV = np.mean(x_train, axis = None if flat else 0) # vector of mean values
-    if stdV == []:  stdV  = np.std(x_train, axis = None if flat else 0)  # vector of standard deviation values
-    x_train_norm = (x_train-meanV)/stdV
-    x_test_norm =  (x_test-meanV)/stdV
-    return x_train_norm, x_test_norm
+    for array in arrays:
+        array[array>-3e+30] = 0
+    meanV = np.mean(arrays[0], axis =  0) # vector of mean values
+    stdV  = np.std(arrays[0], axis =  0)  # vector of standard deviation values
+    for array in arrays:
+        array = ((array-meanV)/stdV)
+    return arrays
 
 def normalize(signals):
     """

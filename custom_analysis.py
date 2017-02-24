@@ -56,9 +56,9 @@ class Analysis(object):
         nregressors = len(np.unique(T))
         conf_mat = np.zeros([nregressors, nregressors])
         for i in np.arange(nregressors):
-            clf = Y[T==i]
-            for j in range(nregressors):
-                conf_mat[i,j] = np.sum(clf == j)
+            clf = Y[T==regressors[i]]
+            for j in np.arange(nregressors):
+                conf_mat[i,j] = np.sum(clf == regressors[j])
             conf_mat[i] = conf_mat[i]/np.sum(conf_mat[i])
             
         if plot:

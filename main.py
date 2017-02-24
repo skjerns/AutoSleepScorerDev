@@ -19,7 +19,6 @@ from models.utilities import Classifier
 if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
 import tools
 import time
-import QRNN
 from sklearn import metrics
 from sklearn.preprocessing import scale
 import matplotlib
@@ -31,20 +30,22 @@ try:
 except IOError:
     print('No previous experiment?')
     counter = 0
-        
+    
+with open('count', 'w') as f:
+  f.write(str(counter+1))        
 
 #%%
 #def main():
-batch_size = 128
-neurons = 30
+batch_size = 64
+neurons = 25
 layers = 3
 epochs= 200
 chunk_size = 3000
-clipping = 250
+clipping = 25
 decay = 1e-5
 cutoff = None
-future = 0
-comment = 'LSTM-norm-3ch, new loader intrasub'
+future = 10
+comment = 'overfitting test'
 #comment = comment + raw_input('Comment? '+ comment)
 link = L.LSTM
 gpu=-1
@@ -52,48 +53,49 @@ gpu=-1
 #result  = [str(neurons) + ': '+ str(runRNN(neurons, layers, epochs, clipping, decay, cutoff, link, gpu, batch_size, comment)) for neurons in nneurons]
 
 #%%
-
+print(comment)
 if os.name == 'posix':
     datadir  = '/home/simon/sleep/'
-    datadir  = '/home/simon/vinc/'
+#    datadir  = '/home/simon/vinc/'
 else:
     datadir = 'c:\\sleep\\data\\'
-#    datadir = 'C:\\sleep\\vinc\\brainvision\\'
+    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
 
 
-    
+
 
 sleep = sleeploader.SleepDataset(datadir)
-selection = np.append(np.arange(0,14).flatten(),np.arange(33,50).flatten())
+selection = np.append(np.arange(0,14),np.arange(33,50))
 #selection = np.array(range(0,14))
 #selection = np.array(range(6))
-#selection=[]
-sleep.load(selection, force_reload=False, shuffle=True, flat=True, chunk_len=chunk_size)
+#children_sel = np.arange(14,33)
+selection=[]
+sleep.load(selection, force_reload=False, shuffle=True, chunk_len=chunk_size)
 
-#train_data, train_target = sleep.get_train(flat=True)
-#test_data, test_target   = sleep.get_test(flat=True)
+train_data, train_target = sleep.get_train()
+test_data, test_target   = sleep.get_test()
 
-train_data, train_target, test_data, test_target = sleep.get_intrasub()
+#child_data, child_target = sleep.load(children_sel, force_reload=False, shuffle=True, flat=True, chunk_len=chunk_size)
+#train_data, train_target, test_data, test_target = sleep.get_intrasub()
 
 #test_data  = tools.normalize(test_data)
 #train_data = tools.normalize(train_data)
 
-signals = train_data[100:103,:,1]
+signals = train_data[100:103,:,0]
 #d
 
 print('Extracting features')
-train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
-test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
-#
-#train_data =  tools.feat_eeg(train_data[:,:,0])
-#test_data  =  tools.feat_eeg(test_data[:,:,0])
+#train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
+#test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
+#child_data = np.hstack( (tools.feat_eeg(child_data[:,:,0]), tools.feat_eog(child_data[:,:,1]), tools.feat_emg(child_data[:,:,2])))
+train_data =  tools.feat_eeg(train_data[:,:,0])
+test_data  =  tools.feat_eeg(test_data[:,:,0])
 
 #train_data =   np.hstack([tools.get_freqs(train_data[:,:,0],50),tools.feat_eog(train_data[:,:,1])])
 #test_data  =   np.hstack([tools.get_freqs(test_data[:,:,0], 50),tools.feat_eog(test_data[:,:,1])])
 
-train_data =  tools.future(train_data, future)
-test_data  =  tools.future(test_data, future)
-
+#train_data =  tools.future(train_data, future)
+#test_data  =  tools.future(test_data, future)
 ## use this for freq data if more than 1 channel used
 #test_data = test_data.reshape((-1,test_data.shape[-1]*test_data.shape[-2]),order='F')
 #train_data = train_data.reshape((-1,train_data.shape[-1]*train_data.shape[-2]),order='F')
@@ -112,15 +114,20 @@ test_data  =  tools.future(test_data, future)
 #test_data = test_data.reshape((-1,1))
 #train_data = train_data[np.newaxis].T
 #test_data = test_data[np.newaxis].T
-train_target[train_target==4]=3
-train_target[train_target==5]=4
-train_target[train_target==8]=5
-test_target [test_target==4]=3
-test_target [test_target==5]=4
-test_target [test_target==8]=5
-#train_data = np.array(np.ravel(train_data),ndmin=2).T
-#test_data  = np.array(np.ravel(test_data),ndmin=2).T
-#
+#child_target[child_target==4] = 3
+train_target[train_target==4] = 3
+#train_target[train_target==5]=4
+#train_target[train_target==8]=5
+test_target [test_target==4] = 3
+#test_target [test_target==5]=4
+#test_target [test_target==8]=5
+
+             
+#train_data   = np.delete(train_data, np.where(train_target==8) ,axis=0)     
+#train_target = np.delete(train_target, np.where(train_target==8) ,axis=0)     
+#test_data = np.delete(test_data, np.where(test_target==8) ,axis=0)     
+#test_target = np.delete(test_target, np.where(test_target==8) ,axis=0)     
+
 #train_target = np.repeat(train_target,3000)
 #test_target = np.repeat(test_target,3000)
 #asd
@@ -136,14 +143,14 @@ test_target [test_target==8]=5
 #del sleep.data
 #del sleep
 #import gc;gc.collect();
-   
-                     
+                    
 # normalize features
-train_data, test_data = tools.zscore(train_data,test_data)
+#train_data, test_data = tools.zscore(train_data, test_data)
 #del sleep.data
 
 if np.sum(np.isnan(train_data)) or np.sum(np.isnan(test_data)):print('Warning! NaNs detected')
 #%% training routine
+
 
 starttime = time.time()
 training_data   = datasets.DynamicData(train_data, train_target, batch_size=batch_size)
@@ -179,8 +186,7 @@ ann.optimize(training_data, validation_data=validation_data, epochs=epochs)
 runtime = time.time() - starttime
                    
 #%%  Reporting and analysis.
-with open('count', 'w') as f:
-  f.write(str(counter+1))
+
 
 
 # plot loss and throughput
@@ -242,6 +248,7 @@ save_dict = {'1 Time':time.strftime("%c"),
             '2 Number': counter,
             'Future': future
                       }
+
 np.set_printoptions(precision=2,threshold=1000)
 tools.append_json('experiments.json', save_dict)
 tools.jsondict2csv('experiments.json', 'experiments.csv')
