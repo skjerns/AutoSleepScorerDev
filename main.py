@@ -46,7 +46,7 @@ clipping = 25
 decay = 1e-5
 cutoff = None
 future = 0
-comment = 'why you not work'
+comment = 'confusiontryout'
 #comment = comment + raw_input('Comment? '+ comment)
 link = L.LSTM
 gpu=-1
@@ -60,28 +60,32 @@ if os.name == 'posix':
 #    datadir  = '/home/simon/vinc/'
 else:
     datadir = 'c:\\sleep\\data\\'
-#    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
+#    datadir = 'C:\\sleep\\vinc\\brainvision\\'
+    datadir = 'C:\\sleep\\corrupted\\'
 
 
 
 
 sleep = sleeploader.SleepDataset(datadir)
-selection = np.append(np.arange(0,14),np.arange(33,50))
+#selection = np.append(np.arange(0,14),np.arange(33,50))
 #selection = np.array(range(0,14))
 #selection = np.array(range(6))
+selection = np.array(range(50))
 #children_sel = np.arange(14,33)
 #selection=[]
-sleep.load(selection, force_reload=False, shuffle=True, chunk_len=chunk_size)
+sleep.load(selection, force_reload=False, shuffle=True, chunk_len=3000)
 
 train_data, train_target = sleep.get_train()
 test_data, test_target   = sleep.get_test()
 
+    
+    
 #child_data, child_target = sleep.load(children_sel, force_reload=False, shuffle=True, flat=True, chunk_len=chunk_size)
 #train_data, train_target, test_data, test_target = sleep.get_intrasub()
 
 #test_data  = tools.normalize(test_data)
 #train_data = tools.normalize(train_data)
-
+stop
 print('Extracting features')
 train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
 test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
@@ -144,9 +148,9 @@ test_target = np.delete(test_target, np.where(test_target==8) ,axis=0)
                     
 # normalize features
 test_data    = scipy.stats.mstats.zmap(test_data, train_data)
-train_data  = scipy.stats.mstats.zmap(train_data, train_data)
+train_data   = scipy.stats.mstats.zmap(train_data, train_data)
 #del sleep.data
-#test_data = np.expa
+#test_data = np.expand_dims(test_data, 2)
 
 
 if np.sum(np.isnan(train_data)) or np.sum(np.isnan(test_data)):print('Warning! NaNs detected')

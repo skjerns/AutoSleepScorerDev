@@ -13,12 +13,27 @@ import os.path
 #import pyfftw
 from scipy import fft
 from scipy import stats
+from scipy.signal import resample
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.utils import shuffle
 import json
 import os
 import re
 
+use_sfreq=128.0
+
+
+def normalize(input_directory, output_directory):
+    """
+    Takes all EEG files in the directory and does the following:
+    - Remove all unused headers
+    - Resample to 100hz
+    """   
+    eeg_files = [s for s in os.listdir(input_directory) if s.endswith(('.vhdr','rec','edf'))]
+    for eeg_file in eeg_files:
+        header = load_eeg_header( os.path.join( input_directory, eeg_file), preload=True)
+        trim_channels(header, sleeploader.SleepDataset.channels)
+        header = header.resample(100.0)
 
 def label_to_one_hot(y):
     '''
@@ -27,7 +42,6 @@ def label_to_one_hot(y):
     n_values = np.max(y) + 1
     y_one_hot = np.eye(n_values)[y]
     return y_one_hot
-
 
 
 
@@ -46,6 +60,8 @@ def normalize(signals):
     return new_signals.squeeze() if new_signals.shape[2]==1 else new_signals
 
 
+
+
 def future(signals, fsteps):
     """
     adds fsteps points of the future to the signal
@@ -62,6 +78,7 @@ def future(signals, fsteps):
     return new_signals.squeeze() if new_signals.shape[2]==1 else new_signals
 
 
+
 def feat_eeg(signals):
     """
     calculate the relative power as defined by Leangkvist (2012),
@@ -69,7 +86,7 @@ def feat_eeg(signals):
     """
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
     
-    sfreq = 100.0
+    sfreq = use_sfreq
     nsamp = float(signals.shape[1])
     feats = np.zeros((signals.shape[0],8),dtype='float32')
     # 5 FEATURE for freq babnds
@@ -99,7 +116,7 @@ def feat_eog(signals):
     """
 
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
-    sfreq = 100.0
+    sfreq = use_sfreq
     nsamp = float(signals.shape[1])
     w = (fft(signals,axis=1)).real   
     feats = np.zeros((signals.shape[0],15),dtype='float32')
@@ -133,7 +150,7 @@ def feat_emg(signals):
     calculate the EMG median as defined by Leangkvist (2012),
     """
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
-    sfreq = 100.0
+    sfreq = use_sfreq
     nsamp = float(signals.shape[1])
     w = (fft(signals,axis=1)).real   
     feats = np.zeros((signals.shape[0],13),dtype='float32')
@@ -249,7 +266,7 @@ def get_freqs (signals, nbins=0):
     :param nbins:  number of bins used as output (default: maximum possible)
     """
     if signals.ndim == 1: signals = np.expand_dims(signals,0)
-    sfreq = 100.0
+    sfreq = use_sfreq
     if nbins == 0: nbins = int(sfreq/2)
     
     nsamp = float(signals.shape[1])
@@ -262,7 +279,93 @@ def get_freqs (signals, nbins=0):
     sum_abs_pow = np.sum(feats,axis=1)
     feats = (feats.T / sum_abs_pow).T
     return feats
-       
+
+
+def trim_channels(data, channels):
+        print(data.ch_names)
+    #    channels dict should look like this:
+    #            channels = dict({'EOG' :'EOG',
+    #                    'VEOG':'EOG',
+    #                    'HEOG':'EOG',
+    #                    'EMG' :'EMG',
+    #                    'EEG' :'EEG',
+    #                    'C3'  :'EEG',
+    #                    'C4'  :'EEG'})
+    
+        curr_ch = data.ch_names
+        to_drop = list(curr_ch)
+        # find EMG, take first
+        for ch in curr_ch:
+            if ch in channels.keys():
+                if channels[ch] == 'EMG': 
+                    to_drop.remove(ch)
+                    data.rename_channels(dict({ch:'EMG'}))
+                    break
+    #            
+        # find EOG, take first
+        for ch in curr_ch:
+            if ch in channels.keys():
+                if channels[ch] == 'EOG': 
+                    to_drop.remove(ch)
+                    data.rename_channels(dict({ch:'EOG'}))
+                    break
+        # find EEG, take first
+        for ch in curr_ch:
+            if ch in channels.keys():
+                if channels[ch] == 'EEG': 
+                    to_drop.remove(ch)
+                    data.rename_channels(dict({ch:'EEG'}))
+                    break       
+        data.drop_channels(to_drop)
+def load_eeg_header(filename, dataformat = '', **kwargs):            # CHECK include kwargs
+        dataformats = dict({
+                            #'bin' :'artemis123',
+                            '???' :'bti',                                           # CHECK
+                            'cnt' :'cnt',
+                            'ds'  :'ctf',
+                            'edf' :'edf',
+                            'rec' :'edf',
+                            'bdf' :'edf',
+                            'sqd' :'kit',
+                            'data':'nicolet',
+                            'set' :'eeglab',
+                            'vhdr':'brainvision',
+                            'egi' :'egi',
+                            'fif':'fif',
+                            'gz':'fif',
+                            })
+        if dataformat == '' :      # try to guess format by extension 
+            ext = os.path.splitext(filename)[1][1:].strip().lower()                
+            dataformat = dataformats[ext]
+            
+        if dataformat == 'artemis123':
+            data = mne.io.read_raw_artemis123(filename, **kwargs)             # CHECK if now in stable release
+        elif dataformat == 'bti':
+            data = mne.io.read_raw_bti(filename, **kwargs)
+        elif dataformat == 'cnt':
+            data = mne.io.read_raw_cnt(filename, **kwargs)
+        elif dataformat == 'ctf':
+            data = mne.io.read_raw_ctf(filename, **kwargs)
+        elif dataformat == 'edf':
+            data = mne.io.read_raw_edf(filename, **kwargs)
+        elif dataformat == 'kit':
+            data = mne.io.read_raw_kit(filename, **kwargs)
+        elif dataformat == 'nicolet':
+            data = mne.io.read_raw_nicolet(filename, **kwargs)
+        elif dataformat == 'eeglab':
+            data = mne.io.read_raw_eeglab(filename, **kwargs)
+        elif dataformat == 'brainvision':                                            # CHECK NoOptionError: No option 'markerfile' in section: 'Common Infos' 
+            data = mne.io.read_raw_brainvision(filename, **kwargs)
+        elif dataformat == 'egi':
+            data = mne.io.read_raw_egi(filename, **kwargs)
+        elif dataformat == 'fif':
+            data = mne.io.read_raw_fif(filename, **kwargs)
+        else: 
+            print(['Failed extension not recognized for file: ', filename])           # CHECK throw error here    
+          
+        if not 'verbose' in  kwargs: print('loaded header ' + filename);
+        
+        return data       
 
 print ('loaded tools.py')
     

@@ -4,6 +4,7 @@ import re
 import numpy as np
 import numpy.random as random
 import tools
+from scipy.signal import resample
 import csv
 import mne
 
@@ -23,7 +24,6 @@ class Singleton(object):
        
 
 class SleepDataset(Singleton):
-
     loaded = False
     shuffle_index = list()
     subjects = list()
@@ -39,7 +39,9 @@ class SleepDataset(Singleton):
                 'C4'  :'EEG',
                 'C3A2':'EEG',
                 'EEG1':'EEG',
-                'EEG2':'EEG'})
+                'EEG2':'EEG',
+                'EMG1':'EMG',
+                'LOC' :'EOG'})
 
     def __init__(self, directory):
         """
@@ -158,10 +160,7 @@ class SleepDataset(Singleton):
             data = mne.io.read_raw_fif(filename, **kwargs)
         else: 
             print(['Failed extension not recognized for file: ', filename])           # CHECK throw error here    
-      
-        if not data.info['sfreq'] == 100:
-            print('Warning: Sampling frequency is not 100. Consider resampling')     # CHECK implement automatic resampling
-            
+          
         if not 'verbose' in  kwargs: print('loaded header ' + filename);
         
         return data
@@ -201,12 +200,15 @@ class SleepDataset(Singleton):
                 if channels[ch] == 'EEG': 
                     to_drop.remove(ch)
                     data.rename_channels(dict({ch:'EEG'}))
-                    break
-                
+                    break       
         data.drop_channels(to_drop)
+    
+    
+    def load_from_numpy(filename):
+        tmp = np.load(filename)
 
 
-    def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000):
+    def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000, resampling = True):
         """
         :param filename: loads the given eeg file
         """
@@ -219,12 +221,22 @@ class SleepDataset(Singleton):
         mne.set_log_level(verbose=False)  # to get rid of the annoying 'convert to float64'
         eeg = np.array(header.to_data_frame().reindex_axis(['EEG','EOG','EMG'],axis=1), dtype=self.dtype)
         mne.set_log_level(verbose=True)
+        self.sfreq     = header.info['sfreq']
+        if not header.info['sfreq'] == 100:
+            if resampling == True:
+                print ('Resampling data')
+                eeg = resample(eeg, len(eeg)/int(np.round(self.sfreq))*100)
+                self.sfreq = 100.0 
+            else:
+                print ('Not resampling')
         
-        sfreq     = header.info['sfreq']
+        
+        
+        
         hypno_len = len(hypno)
         eeg_len   = len(eeg)
-        epoch_len = int(eeg_len / hypno_len / sfreq) 
-        self.samples_per_epoch = int(epoch_len * sfreq)
+        epoch_len = int(eeg_len / hypno_len / self.sfreq) 
+        self.samples_per_epoch = int(epoch_len * self.sfreq)
         
 
         eeg = eeg[:(len(eeg)/self.samples_per_epoch)*self.samples_per_epoch]     # remove left over to ensure len(data)%3000==0
@@ -263,8 +275,7 @@ class SleepDataset(Singleton):
         
         
         
-    def get_intrasub(self, splits=3, test=1 ):
-        
+    def get_intrasub(self, splits=3, test=1 ):  
         train_data = list()
         train_target = list()
         test_data = list()
@@ -336,7 +347,7 @@ class SleepDataset(Singleton):
         return np.vstack(eeg), np.hstack(hypno)
        
         
-    def load(self, sel = [], shuffle = False,  force_reload = False, flat = None, chunk_len = 3000, dtype=np.float32):
+    def load(self, sel = [], shuffle = False,  force_reload = False, resampling =True, flat = None, chunk_len = 3000, dtype=np.float32):
         """
         :param sel:          np.array with indices of files to load from the directory. Natural sorting.
         :param shuffle:      shuffle subjects or not
@@ -389,7 +400,7 @@ class SleepDataset(Singleton):
 
         # load EEG and adapt Hypno files
         for i in range(len(self.eeg_files)):
-            eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_len)
+            eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_len, resampling)
             if(len(eeg) != len(curr_hypno) * self.samples_per_epoch):
                 print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(curr_hypno)* self.samples_per_epoch))
             self.data.append(eeg)
