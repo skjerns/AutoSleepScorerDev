@@ -8,6 +8,7 @@ if not '__file__' in vars(): __file__= u'C:/Users/Simon/dropbox/Uni/Masterthesis
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+'/ANN')
 import chainer.links as L
+import scipy
 import numpy as np
 import datasets
 import supervised_learning
@@ -44,8 +45,8 @@ chunk_size = 3000
 clipping = 25
 decay = 1e-5
 cutoff = None
-future = 10
-comment = 'overfitting test'
+future = 0
+comment = 'why you not work'
 #comment = comment + raw_input('Comment? '+ comment)
 link = L.LSTM
 gpu=-1
@@ -59,7 +60,7 @@ if os.name == 'posix':
 #    datadir  = '/home/simon/vinc/'
 else:
     datadir = 'c:\\sleep\\data\\'
-    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
+#    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
 
 
 
@@ -69,7 +70,7 @@ selection = np.append(np.arange(0,14),np.arange(33,50))
 #selection = np.array(range(0,14))
 #selection = np.array(range(6))
 #children_sel = np.arange(14,33)
-selection=[]
+#selection=[]
 sleep.load(selection, force_reload=False, shuffle=True, chunk_len=chunk_size)
 
 train_data, train_target = sleep.get_train()
@@ -81,15 +82,12 @@ test_data, test_target   = sleep.get_test()
 #test_data  = tools.normalize(test_data)
 #train_data = tools.normalize(train_data)
 
-signals = train_data[100:103,:,0]
-#d
-
 print('Extracting features')
-#train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
-#test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
+train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
+test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
 #child_data = np.hstack( (tools.feat_eeg(child_data[:,:,0]), tools.feat_eog(child_data[:,:,1]), tools.feat_emg(child_data[:,:,2])))
-train_data =  tools.feat_eeg(train_data[:,:,0])
-test_data  =  tools.feat_eeg(test_data[:,:,0])
+#train_data =  tools.feat_eeg(train_data[:,:,0])
+#test_data  =  tools.feat_eeg(test_data[:,:,0])
 
 #train_data =   np.hstack([tools.get_freqs(train_data[:,:,0],50),tools.feat_eog(train_data[:,:,1])])
 #test_data  =   np.hstack([tools.get_freqs(test_data[:,:,0], 50),tools.feat_eog(test_data[:,:,1])])
@@ -116,17 +114,17 @@ test_data  =  tools.feat_eeg(test_data[:,:,0])
 #test_data = test_data[np.newaxis].T
 #child_target[child_target==4] = 3
 train_target[train_target==4] = 3
-#train_target[train_target==5]=4
+train_target[train_target==5] = 4
 #train_target[train_target==8]=5
 test_target [test_target==4] = 3
-#test_target [test_target==5]=4
+test_target [test_target==5] = 4
 #test_target [test_target==8]=5
 
              
-#train_data   = np.delete(train_data, np.where(train_target==8) ,axis=0)     
-#train_target = np.delete(train_target, np.where(train_target==8) ,axis=0)     
-#test_data = np.delete(test_data, np.where(test_target==8) ,axis=0)     
-#test_target = np.delete(test_target, np.where(test_target==8) ,axis=0)     
+train_data   = np.delete(train_data, np.where(train_target==8) ,axis=0)     
+train_target = np.delete(train_target, np.where(train_target==8) ,axis=0)     
+test_data = np.delete(test_data, np.where(test_target==8) ,axis=0)     
+test_target = np.delete(test_target, np.where(test_target==8) ,axis=0)     
 
 #train_target = np.repeat(train_target,3000)
 #test_target = np.repeat(test_target,3000)
@@ -145,8 +143,11 @@ test_target [test_target==4] = 3
 #import gc;gc.collect();
                     
 # normalize features
-#train_data, test_data = tools.zscore(train_data, test_data)
+test_data    = scipy.stats.mstats.zmap(test_data, train_data)
+train_data  = scipy.stats.mstats.zmap(train_data, train_data)
 #del sleep.data
+#test_data = np.expa
+
 
 if np.sum(np.isnan(train_data)) or np.sum(np.isnan(test_data)):print('Warning! NaNs detected')
 #%% training routine
@@ -165,7 +166,7 @@ nout = np.max(training_data.T)+1
 # Enable/Disable different models here.
 model = Classifier(models.RecurrentNeuralNetwork(nin, neurons, nout, nlayer=layers, link=link))
 #model = Classifier(models.DeepNeuralNetwork(nin, neurons, nout, nlayer=layers))
-
+#model = Classifier(models.WaveNetLike([1, 2, 4, 8, 16], nin, nout))
 
 if gpu >= 0:
     chainer.cuda.memory_pool.free_all_blocks()

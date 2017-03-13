@@ -19,17 +19,18 @@ import json
 import os
 import re
 
-def zscore(*arrays):
-    """
-        Normalization all arrays with values from the first array.
-    """ 
-    for array in arrays:
-        array[array>-3e+30] = 0
-    meanV = np.mean(arrays[0], axis =  0) # vector of mean values
-    stdV  = np.std(arrays[0], axis =  0)  # vector of standard deviation values
-    for array in arrays:
-        array = ((array-meanV)/stdV)
-    return arrays
+
+def label_to_one_hot(y):
+    '''
+    Convert labels into "one-hot" representation
+    '''
+    n_values = np.max(y) + 1
+    y_one_hot = np.eye(n_values)[y]
+    return y_one_hot
+
+
+
+
 
 def normalize(signals):
     """
@@ -242,18 +243,6 @@ def epoch_voting(Y, chunk_size):
 
     
     
-def get_freq_bands (epoch): # DEPRECATED
-    print('get_freq_bands is deprecated, use get_freqs')
-    w = (fft(epoch,axis=0)).real
-    w = w[:len(w)/2]
-    w = np.split(w,50)
-    for i in np.arange(50):
-        w[i] = np.mean(w[i],axis=0)
-    
-    return np.array(np.abs(w))
-
-
-
 def get_freqs (signals, nbins=0):
     """ extracts relative fft frequencies and bins them in n bins
     :param signals: 1D or 2D signals

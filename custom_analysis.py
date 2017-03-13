@@ -56,14 +56,14 @@ class Analysis(object):
         nregressors = len(np.unique(T))
         conf_mat = np.zeros([nregressors, nregressors])
         for i in np.arange(nregressors):
-            clf = Y[T==regressors[i]]
-            for j in np.arange(nregressors):
-                conf_mat[i,j] = np.sum(clf == regressors[j])
+            clf = Y[T==i]
+            for j in range(nregressors):
+                conf_mat[i,j] = np.sum(clf == j)
             conf_mat[i] = conf_mat[i]/np.sum(conf_mat[i])
             
         if plot:
             plt.figure()
-            plt.imshow(conf_mat, cmap='jet', interpolation='nearest')
+            plt.imshow(conf_mat, cmap='jet')
             plt.xlabel('Predicted class')
             plt.ylabel('True class')
             plt.xticks(np.arange(nregressors))
