@@ -67,14 +67,14 @@ else:
 
 
 sleep = sleeploader.SleepDataset(datadir)
-#selection = np.append(np.arange(0,14),np.arange(33,50))
+selection = np.append(np.arange(0,14),np.arange(32,50))
 #selection = np.array(range(0,14))
-#selection = np.array(range(6))
-selection = np.array(range(50))
-#children_sel = np.arange(14,33)
-#selection=[]
-sleep.load(selection, force_reload=False, shuffle=True, chunk_len=3000)
-
+selection = np.array(range(6))
+#selection = np.array(range(50))
+selection = np.arange(14,32)
+selection=[]
+sleep.load(selection, force_reload=False, shuffle=False, chunk_len=3000)
+stop
 train_data, train_target = sleep.get_train()
 test_data, test_target   = sleep.get_test()
 

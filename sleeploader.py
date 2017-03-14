@@ -6,6 +6,7 @@ import numpy.random as random
 import tools
 from scipy.signal import resample
 import csv
+import cPickle
 import mne
 
 def natural_key(string_):
@@ -204,8 +205,24 @@ class SleepDataset(Singleton):
         data.drop_channels(to_drop)
     
     
-    def load_from_numpy(filename):
-        tmp = np.load(filename)
+    
+    def load_object(self, filename = 'sleepdata.dat', path = None):
+        """
+        saves the entire state of the SleepData object
+        """
+        if path == None: path = self.directory
+        with open(os.path.join(path, filename), 'rb') as f:
+            tmp_dict = cPickle.load(f)
+        self.__dict__.update(tmp_dict)
+
+
+    def save_object(self, filename = 'sleepdata.dat', path = None):
+        """
+        restores a previously stored SleepData object
+        """
+        if path == None: path = self.directory
+        with open(os.path.join(path, filename), 'wb') as f:
+            cPickle.dump(self.__dict__,f,2)
 
 
     def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000, resampling = True):
@@ -392,7 +409,7 @@ class SleepDataset(Singleton):
             print('ERROR: Not the same number of Hypno and EEG files. Hypno: ' + str(len(self.hypno_files))+ ', EEG: ' + str(len(self.eeg_files)))
             
         # select slice
-        if sel==[]: sel = range(len(self.hypno_files))
+        if sel==[]: sel = range(len(self.eeg_files))
         self.hypno_files = list(map(self.hypno_files.__getitem__, sel))
         self.eeg_files   = list(map(self.eeg_files.__getitem__, sel))
         self.shuffle_index = list(sel);
