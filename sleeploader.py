@@ -205,6 +205,31 @@ class SleepDataset(Singleton):
         data.drop_channels(to_drop)
     
     
+    def load_hypnopickle(self, filename, path = None):
+        """
+        loads hypnograms from a pickle file
+        """
+        if path == None: path = self.directory
+        with open(os.path.join(path, filename), 'rb') as f:
+            self.hypno, self.hypno_files = cPickle.load(f)
+            self.subjects = zip(self.eeg_files,self.hypno_files)
+            if len(self.hypno) != len(self.data): 
+                print('WARNING: {} EEG files and {} Hypno files'.format(len(self.eeg_files),len(self.hypno)))
+            else:
+                for i in np.arange(len(self.data)):
+                    if len(self.data[i])/ self.samples_per_epoch != len(self.hypno[i]):
+                        print('WARNING, subject {} has EEG len {} and Hypno len {}'.format(i, len(self.data[i])/ self.samples_per_epoch,len(self.hypno[i])))               
+            print ('Loaded hypnogram with {} subjects'.format(len(self.hypno)))
+        
+        
+    def save_hypnopickle(self, filename, path = None):
+        """
+        saves the current hypnograms to a pickle file
+        """
+        if path == None: path = self.directory
+        with open(os.path.join(path, filename), 'wb') as f:
+            cPickle.dump((self.hypno,self.hypno_files),f,2)
+        
     
     def load_object(self, filename = 'sleepdata.dat', path = None):
         """
@@ -223,6 +248,13 @@ class SleepDataset(Singleton):
         if path == None: path = self.directory
         with open(os.path.join(path, filename), 'wb') as f:
             cPickle.dump(self.__dict__,f,2)
+    
+    def load_hypno_(self, files):
+        self.hypno = []
+        self.hypno_files = files
+        for f in files:
+            hypno  = self.load_hypnogram(os.path.join(self.directory + f), mode = 'standard')
+            self.hypno.append(hypno)
 
 
     def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000, resampling = True):
@@ -238,17 +270,15 @@ class SleepDataset(Singleton):
         mne.set_log_level(verbose=False)  # to get rid of the annoying 'convert to float64'
         eeg = np.array(header.to_data_frame().reindex_axis(['EEG','EOG','EMG'],axis=1), dtype=self.dtype)
         mne.set_log_level(verbose=True)
+        
         self.sfreq     = header.info['sfreq']
         if not header.info['sfreq'] == 100:
             if resampling == True:
-                print ('Resampling data')
+                print ('Resampling data from {}hz to 100hz'.format(int(self.sfreq)))
                 eeg = resample(eeg, len(eeg)/int(np.round(self.sfreq))*100)
                 self.sfreq = 100.0 
             else:
                 print ('Not resampling')
-        
-        
-        
         
         hypno_len = len(hypno)
         eeg_len   = len(eeg)
@@ -436,3 +466,6 @@ class SleepDataset(Singleton):
             return self.data,self.hypno
             
 print('loaded sleeploader.py')
+
+
+

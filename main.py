@@ -61,19 +61,20 @@ if os.name == 'posix':
 else:
     datadir = 'c:\\sleep\\data\\'
 #    datadir = 'C:\\sleep\\vinc\\brainvision\\'
-    datadir = 'C:\\sleep\\corrupted\\'
+#    datadir = 'C:\\sleep\\corrupted\\'
 
 
 
 
 sleep = sleeploader.SleepDataset(datadir)
-selection = np.append(np.arange(0,14),np.arange(32,50))
-#selection = np.array(range(0,14))
-selection = np.array(range(6))
-#selection = np.array(range(50))
-selection = np.arange(14,32)
-selection=[]
-sleep.load(selection, force_reload=False, shuffle=False, chunk_len=3000)
+#selection = np.append(np.arange(0,14),np.arange(32,50))
+##selection = np.array(range(0,14))
+#selection = np.array(range(6))
+##selection = np.array(range(50))
+#selection = np.arange(14,32)
+#selection=[]
+#sleep.load(selection, force_reload=False, shuffle=False, chunk_len=3000)
+sleep.load_object()
 stop
 train_data, train_target = sleep.get_train()
 test_data, test_target   = sleep.get_test()
@@ -170,7 +171,7 @@ nout = np.max(training_data.T)+1
 # Enable/Disable different models here.
 model = Classifier(models.RecurrentNeuralNetwork(nin, neurons, nout, nlayer=layers, link=link))
 #model = Classifier(models.DeepNeuralNetwork(nin, neurons, nout, nlayer=layers))
-#model = Classifier(models.WaveNetLike([1, 2, 4, 8, 16], nin, nout))
+model = Classifier(models.WaveNetLike([1, 2, 4, 8, 16], nin, nout))
 
 if gpu >= 0:
     chainer.cuda.memory_pool.free_all_blocks()
