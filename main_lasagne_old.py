@@ -9,14 +9,10 @@ import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+'/ANN')
 import numpy as np
 import lasagne
-from tqdm import tnrange, tqdm
-from lasagne import layers as L
 from theano import tensor as T
 import theano
 #from custom_analysis import Analysis
 import matplotlib.pyplot as plt
-from sklearn.metrics import f1_score
-from sklearn.metrics import accuracy_score
 if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
 import tools
 import time
@@ -24,9 +20,6 @@ import sklearn
 from sklearn import metrics
 from sklearn.preprocessing import scale
 import matplotlib
-from lasagne.regularization import regularize_layer_params_weighted, l2
-import trainer
-
 matplotlib.rcParams['figure.figsize'] = (10, 3)
 import scipy
 try:
@@ -40,10 +33,12 @@ with open('count', 'w') as f:
   f.write(str(counter+1))        
 #%%
 #def main():
+batch_size = 64
 neurons = 25
 layers = 3
 epochs= 200
 chunk_size = 3000
+clipping = 25
 decay = 1e-5
 cutoff = None
 future = 0
@@ -77,15 +72,16 @@ sleep.load_object()
 sleep.shuffle_data()
 train_data, train_target = sleep.get_train()
 test_data, test_target   = sleep.get_test()
+train_data = train_data[:,:,1]
+test_data = test_data[:,:,1]
 
-#
 test_data    = scipy.stats.mstats.zmap(test_data, train_data , axis = None)
 train_data   = scipy.stats.mstats.zmap(train_data, train_data, axis = None)
 
 
 #child_data, child_target = sleep.load(children_sel, force_reload=False, shuffle=True, flat=True, chunk_len=chunk_size)
 #train_data, train_target, test_data, test_target = sleep.get_intrasub()
-
+ 
 #test_data  = tools.normalize(test_data)
 #train_data = tools.normalize(train_data)
  
@@ -125,19 +121,22 @@ test_target  = np.delete(test_target, np.where(test_target==8) ,axis=0)
 #validation_data = custom_datasets.DynamicData(test_data, test_target, batch_size=batch_size)             
 #train_data = np.expand_dims(train_data,1)
 #test_data = np.expand_dims(test_data,1)
-#train_data = np.expand_dims(train_data,1)
-#test_data = np.expand_dims(test_data,1)
-train_data = train_data.swapaxes(1,2)
-test_data = test_data.swapaxes(1,2)
-#train_data = train_data[:,0:1,:]
-#test_data = test_data[:,0:1,:]
-
+train_data = np.expand_dims(train_data,1)
+test_data = np.expand_dims(test_data,1)
 # 
 if np.sum(np.isnan(train_data)) or np.sum(np.isnan(test_data)):print('Warning! NaNs detected')
 #%% training routine
 #train_target = tools.label_to_one_hot(train_target)
 #test_target  = tools.label_to_one_hot(test_target)
 
+starttime = time.time()
+#training_data   = datasets.DynamicData(train_data, train_target, batch_size=batch_size)
+#validation_data = datasets.DynamicData(test_data, test_target, batch_size=batch_size)
+ 
+data_size = train_data.shape
+n_classes = len(np.unique(train_target))
+input_var  = T.tensor3('inputs')
+target_var = T.ivector('targets')
 
 #def LSTM(data_size, n_classes):
 #    network = L.InputLayer(shape=(None, None, data_size[2]))
@@ -146,6 +145,7 @@ if np.sum(np.isnan(train_data)) or np.sum(np.isnan(test_data)):print('Warning! N
 #    network = L.LSTMLayer(network,  25)
 #    network = L.DenseLayer( network, num_units=n_classes, W=lasagne.init.GlorotNormal(), nonlinearity=lasagne.nonlinearities.softmax)
 #    return network
+from lasagne import layers as L
 def tsinalis(data_size, n_classes):
     network = L.InputLayer(shape=(None, 1, 1, data_size[3]), input_var=input_var)
     print network.output_shape
@@ -172,55 +172,18 @@ def tsinalis(data_size, n_classes):
 def CNN(data_size, n_classes):
     network = L.InputLayer(shape=(None, data_size[1], data_size[2]), input_var=input_var)
     print network.output_shape
-    network = L.Conv1DLayer( network, num_filters=50, filter_size = 50, stride = 10, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.batch_norm(network)
-    network = L.DropoutLayer(network, p=0.2)
-    network = L.Conv1DLayer( network, num_filters=100, filter_size = 5, stride = 1, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.DropoutLayer(network, p=0.2)
-    network = L.batch_norm(network)
-    network = L.MaxPool1DLayer(network, pool_size = (5), stride = (2))
-    
-    network = L.Conv1DLayer( network, num_filters=100, filter_size = 5, stride = 2, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.DropoutLayer(network, p=0.2)
-    network = L.batch_norm(network)
-    network = L.MaxPool1DLayer(network, pool_size = (5), stride = (2))
-    
-    print network.output_shape
-    network = L.DenseLayer( network, num_units=500, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.batch_norm(network)
-    network = L.DropoutLayer(network, p=0.5)
-    network = L.DenseLayer( network, num_units=500, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.batch_norm(network)
-    network = L.DropoutLayer(network, p=0.5)
-    print network.output_shape
-
-    network = L.DenseLayer( network, num_units=n_classes,W=lasagne.init.GlorotNormal(),      nonlinearity=lasagne.nonlinearities.softmax)
-    return network
-
-def RNN(data_size, n_classes):
-    network = L.InputLayer(shape=(None, data_size[1], data_size[2]), input_var=input_var)
-    print network.output_shape
     network = L.Conv1DLayer( network, num_filters=50, filter_size = 50, stride = 10, W=lasagne.init.HeNormal())
     network = L.batch_norm(network)
     network = L.DropoutLayer(network, p=0.2)
 
-    network = L.Conv1DLayer( network, num_filters=50, filter_size = 5, stride = 1, W=lasagne.init.HeNormal())
+    network = L.Conv1DLayer( network, num_filters=100, filter_size = 5, stride = 1, W=lasagne.init.HeNormal())
     network = L.DropoutLayer(network, p=0.2)
 
     network = L.batch_norm(network)
     network = L.MaxPool1DLayer(network, pool_size = (5), stride = (2))
-    network = L.Conv1DLayer( network, num_filters=50, filter_size = 5, stride = 1, W=lasagne.init.HeNormal())
-    network = L.DropoutLayer(network, p=0.2)
-    network = L.batch_norm(network)
-    network = L.MaxPool1DLayer(network, pool_size = (4), stride = (2))
+    network = L.DimshuffleLayer(network, (0, 2, 1))
     print network.output_shape
-
-    network = L.FlattenLayer(network)
-    print network.output_shape
-    network = L.ReshapeLayer(network, [-1,4, [1]])
-    print network.output_shape
-
-    network = L.LSTMLayer(network, 250,only_return_final =True)
+    network = L.LSTMLayer(network, 250)
     network = L.DenseLayer( network, num_units=500, W=lasagne.init.HeNormal())
     network = L.batch_norm(network)
     network = L.DropoutLayer(network, p=0.5)
@@ -229,137 +192,42 @@ def RNN(data_size, n_classes):
     network = L.DenseLayer( network, num_units=n_classes,W=lasagne.init.GlorotNormal(),      nonlinearity=lasagne.nonlinearities.softmax)
     return network
 
-
-def training_function(network, input_tensor, target_tensor, learning_rate, use_l2_regularization=False):
-    network_output = L.get_output(network)
-    if use_l2_regularization:
-        l2_loss = lasagne.regularization.regularize_network_params(network, lasagne.regularization.l2)
-        loss = lasagne.objectives.categorical_crossentropy(network_output, target_tensor).mean() + (l2_loss * 0.0001)
-    else:
-        loss = lasagne.objectives.categorical_crossentropy(network_output, target_tensor).mean()  
-    pred = T.argmax(network_output, axis=1)
-    network_params  = L.get_all_params(network, trainable=True)
-    weight_updates  = lasagne.updates.adadelta(loss, network_params)
-    return theano.function([input_tensor, target_tensor], [loss, pred], updates=weight_updates)
-
-
-def validate_function(network, input_tensor, target_tensor):
-    network_output = L.get_output(network, deterministic=True)
-    loss = lasagne.objectives.categorical_crossentropy(network_output, target_tensor).mean() 
-#     accuracy = T.mean(T.eq(T.argmax(network_output, axis=1), target_tensor), dtype=theano.config.floatX)
-    pred = T.argmax(network_output, axis=1)
-    return theano.function([input_tensor, target_tensor], [loss, pred])
+def RNN2(data_size, n_classes):
+    network = L.InputLayer(shape=(None, data_size[1], data_size[2]), input_var=input_var)
+    print network.output_shape
+    network = L.Conv1DLayer( network, num_filters=32, filter_size = 5,  nonlinearity=lasagne.nonlinearities.elu, W=lasagne.init.HeNormal()) 
+    print network.output_shape
+    network = L.DimshuffleLayer(network, (0, 2, 1))
+    print network.output_shape
+    network = L.LSTMLayer(network, 200)
+    print network.output_shape
+    network = L.DenseLayer( network,num_leading_axes=2, num_units=n_classes,W=lasagne.init.GlorotNormal(),      nonlinearity=lasagne.nonlinearities.softmax)
+    print network.output_shape 
+    return network
 
 
-def evaluate_function(network, input_tensor):
-    network_output = lasagne.layers.get_output(network, deterministic=True)
-    return theano.function([input_tensor], network_output)
-
-#%%
-learning_rate = 0.001
-
-data_size = train_data.shape
-n_classes = len(np.unique(train_target))
-input_var  = T.tensor3('inputs')
-target_var = T.ivector('targets')
-batch_size = 1280
-test_batch_size = 1280
-epochs = 100
-network_name = 'CNN'
-
+from lasagne.regularization import regularize_layer_params_weighted, l2
 network = CNN(data_size, n_classes)
 
-train_fn = training_function(network, input_var, target_var, learning_rate)
-val_fn =  validate_function(network, input_var, target_var)
+#%%
+# get the prediction during training
+network_output = L.get_output(network)
+loss = lasagne.objectives.categorical_crossentropy(network_output, target_var).mean()
+params = L.get_all_params(network, trainable=True)
+updates = lasagne.updates.adam(loss,params)
+accuracy = T.mean(T.eq(T.argmax(network_output, axis=1), target_var), dtype=theano.config.floatX)
 
-aa = trainer.train('test', network,train_fn, val_fn, train_data, train_target, test_data, 
-                   test_target, test_data,test_target, epochs=50, batch_size=1024)
-#%% new training routine
-stop
-best_val_acc = 0.0
-tra_loss_lst = []
-tra_acc_lst = []
-tra_f1_lst = []
-val_loss_lst = []
-val_acc_lst = []  
-val_f1_lst = []
-n_batch_train = len(train_data)/batch_size # number of training mini-batches given the batch_size
-n_batch_test   = len(test_data)/test_batch_size 
-fig = plt.figure(figsize=(10, 5))
+train_fn = theano.function([input_var, target_var], [loss, accuracy], updates=updates)
 
-# Main training loop
-for epoch in range(epochs):
-    train_data, train_target = sklearn.utils.shuffle(train_data,train_target)
-    
-    # training        
-    tra_losses = []
-    tra_preds, tra_targs = [], []
-    f1 = 0.0
-    print('training...')
-    for b in tqdm(range(0, n_batch_train+1), leave=False):
-        X = train_data[b*batch_size:(b+1)*batch_size,:].astype(np.float32) # extract a mini-batch from x_train
-        Y = train_target[b*batch_size:(b+1)*batch_size] # extract labels for the mini-batch
-        loss, pred = train_fn(X.astype(np.float32), Y.astype(np.int32))
-        tra_losses.append(loss)
-        tra_preds.append(pred)
-        tra_targs.append(Y)
-        
-    tra_preds = np.hstack(tra_preds)
-    tra_targs = np.hstack(tra_targs)
-    tra_f1  = f1_score(tra_preds, tra_targs, average='macro')  
-    tra_acc = accuracy_score(tra_preds,tra_targs)
-    
-    tra_loss_lst.append(np.mean(tra_losses))
-    tra_acc_lst.append(tra_acc)
-    tra_f1_lst.append(tra_f1)
-        
-    
-    # validation
-    val_losses = []
-    val_preds, val_targs = [], []
-    f1 = 0.0
-    print('validation...')
-    for b in tqdm(range(0, n_batch_test+1), leave=False):
-        X = test_data[b*test_batch_size:(b+1)*test_batch_size,:].astype(np.float32) # extract a mini-batch from x_train
-        Y = test_target[b*test_batch_size:(b+1)*test_batch_size] # extract labels for the mini-batch
-        loss, pred = val_fn(X.astype(np.float32), Y.astype(np.int32))
-        val_losses.append(loss)
-        val_preds.append(pred)
-        val_targs.append(Y)
-        
-    val_preds = np.hstack(val_preds)
-    val_targs = np.hstack(val_targs)
-    val_f1 = f1_score(val_preds, val_targs, average='macro')  
-    val_acc = accuracy_score(val_preds,val_targs)
-        
-        
-    val_loss_lst.append(np.mean(val_losses))
-    val_acc_lst.append(val_f1)   
-    val_f1_lst.append(val_f1)
+prediction = L.get_output(network, deterministic = True)
+layers = {network.input_layer.input_layer: 0.5, network.input_layer.input_layer: 0.5}
+l2_penalty = regularize_layer_params_weighted(layers, l2)
 
-    #continue
-    print('Train f1/acc:{:.1f}/{:.1f}, Val f1/acc:{:.1f}/{:.1f}'.format(tra_f1*100,tra_acc*100,val_f1*100,val_acc*100))
-    if val_f1 > best_val_acc:
-        best_val_acc = val_f1
-        # save network
-        params = L.get_all_param_values(network)
-        np.savez(os.path.join('./', network_name+'.npz'), params=params)
-
-    # plot learning curves
-    tra_loss_plt, = plt.plot(range(len(tra_loss_lst)), tra_loss_lst, 'b')
-    val_loss_plt, = plt.plot(range(len(val_loss_lst)), val_loss_lst, 'g')
-    tra_acc_plt, = plt.plot(range(len(tra_acc_lst)), tra_acc_lst, 'm')
-    val_acc_plt, = plt.plot(range(len(val_acc_lst)), val_acc_lst, 'r')
-    plt.xlabel('epoch')
-    plt.ylabel('loss')
-    plt.legend([tra_loss_plt, val_loss_plt, tra_acc_plt, val_acc_plt], 
-                ['training loss', 'validation loss', 'training accuracy', 'validation accuracy'],
-                loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.title('Best validation f1= {:.2f}%'.format(100. * best_val_acc))
-    plt.pause(0.01)
-    
-#%% start training
-starttime = time.time()
+val_loss = lasagne.objectives.categorical_crossentropy(prediction, target_var).mean() # + l2_penalty
+accuracy = T.mean(T.eq(T.argmax(prediction, axis=1), target_var), dtype=theano.config.floatX)
+val_fn = theano.function([input_var, target_var], [val_loss, accuracy, T.argmax(prediction, axis=1)],allow_input_downcast=True)
+#pred_fn = theano.function([input_var], network_output)
+ 
 n_mini_batch_training = data_size[0]/batch_size # number of training mini-batches given the batch_size
  
 # lists where we will be storing values during training, for visualization purposes
@@ -375,6 +243,7 @@ val_accs   = []
 best_val_acc = 0
 # loop over the number of epochs
 plt.close('all')
+from sklearn.metrics import f1_score
 def train_convnet(network,
                   train_x,
                   train_y,

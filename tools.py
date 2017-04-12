@@ -109,6 +109,36 @@ def feat_eeg(signals):
     return np.nan_to_num(feats)
 
 
+def feat_wavelet(signals):
+    """
+    calculate the relative power as defined by Leangkvist (2012),
+    assuming signal is recorded with 100hz
+    """
+    if signals.ndim == 1: signals = np.expand_dims(signals,0)
+    
+    sfreq = use_sfreq
+    nsamp = float(signals.shape[1])
+    feats = np.zeros((signals.shape[0],8),dtype='float32')
+    # 5 FEATURE for freq babnds
+    w = (fft(signals,axis=1)).real
+    delta = np.sum(np.abs(w[:,np.arange(0.5*nsamp/sfreq,4*nsamp/sfreq, dtype=int)]),axis=1)
+    theta = np.sum(np.abs(w[:,np.arange(4*nsamp/sfreq,8*nsamp/sfreq, dtype=int)]),axis=1)
+    alpha = np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,13*nsamp/sfreq, dtype=int)]),axis=1)
+    beta  = np.sum(np.abs(w[:,np.arange(13*nsamp/sfreq,20*nsamp/sfreq, dtype=int)]),axis=1)
+    gamma = np.sum(np.abs(w[:,np.arange(20*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),axis=1)   # only until 50, because hz=100
+    sum_abs_pow = delta + theta + alpha + beta + gamma
+    feats[:,0] = delta /sum_abs_pow
+    feats[:,1] = theta /sum_abs_pow
+    feats[:,2] = alpha /sum_abs_pow
+    feats[:,3] = beta  /sum_abs_pow
+    feats[:,4] = gamma /sum_abs_pow
+    feats[:,5] = np.log10(stats.kurtosis(signals,fisher=False,axis=1))        # kurtosis
+    feats[:,6] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
+    #feats[:,7] = np.polynomial.polynomial.polyfit(np.log(f[np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]), np.log(w[0,np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),1)
+    feats[:,7] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5)
+    return np.nan_to_num(feats)
+
+
 def feat_eog(signals):
     """
     calculate the EOG features

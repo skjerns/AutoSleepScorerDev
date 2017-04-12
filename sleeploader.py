@@ -53,11 +53,8 @@ class SleepDataset(Singleton):
         else:
             self.data = list()
             self.hypno = list()  
+        self.directory = directory
             
-        if os.name != 'posix':
-            self.directory = directory + '\\'
-        else:
-            self.directory = directory
         return None
     
     
@@ -253,7 +250,7 @@ class SleepDataset(Singleton):
         self.hypno = []
         self.hypno_files = files
         for f in files:
-            hypno  = self.load_hypnogram(os.path.join(self.directory + f), mode = 'standard')
+            hypno  = self.load_hypnogram(os.path.join(self.directory + f), mode = 'overwrite')
             self.hypno.append(hypno)
 
 
@@ -307,7 +304,7 @@ class SleepDataset(Singleton):
         return self.data[self.shuffle_index.index(index)], self.hypno[self.shuffle_index.index(index)] # index.index(index), beautiful isn't it?? :)
         
     
-    def get_all_data(self, flat=True):
+    def get_all_data(self, flat=True, groups = False):
         """
         returns all data that is loaded
         :param flat: select if data will be returned in a flat list or a list per subject
@@ -316,7 +313,7 @@ class SleepDataset(Singleton):
         if self.loaded == False: print('ERROR: Data not loaded yet')
             
         if flat == True:
-            return  self._makeflat()
+            return  self._makeflat(groups=groups)
         else:
             return self.data, self.hypno
         
@@ -377,7 +374,7 @@ class SleepDataset(Singleton):
             return self.data[start:], self.hypno[start:]
         
         
-    def _makeflat(self, start=None, end=None):     
+    def _makeflat(self, start=None, end=None, groups = False):     
         eeg = list()
         for sub in self.data[start:end]:
             if len(sub) % self.chunk_len == 0:
@@ -386,12 +383,18 @@ class SleepDataset(Singleton):
                 print('ERROR: Please choose a chunk length that is a factor of {}'.format(self.samples_per_epoch))
                 return [0,0]
         hypno = list()
+        group = list()
         hypno_repeat = self.samples_per_epoch / self.chunk_len
-        
+        idx = 0
         for sub in self.hypno[start:end]:
             hypno.append(np.repeat(sub, hypno_repeat))
+            group.append(np.repeat(idx, len(hypno[-1])))
+            idx += 1
         
-        return np.vstack(eeg), np.hstack(hypno)
+        if groups:
+            return np.vstack(eeg), np.hstack(hypno), np.hstack(group)
+        else:
+            return np.vstack(eeg), np.hstack(hypno)
        
         
     def load(self, sel = [], shuffle = False,  force_reload = False, resampling =True, flat = None, chunk_len = 3000, dtype=np.float32):

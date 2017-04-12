@@ -37,8 +37,8 @@ with open('count', 'w') as f:
 
 #%%
 #def main():
-batch_size = 64
-neurons = 25
+batch_size = 128
+neurons = 50
 layers = 3
 epochs= 200
 chunk_size = 3000
@@ -46,7 +46,9 @@ clipping = 25
 decay = 1e-5
 cutoff = None
 future = 0
-comment = 'confusiontryout'
+selection = 'all'
+
+comment = 'corrupted 0 percent RNN intrasub'
 #comment = comment + raw_input('Comment? '+ comment)
 link = L.LSTM
 gpu=-1
@@ -74,25 +76,22 @@ sleep = sleeploader.SleepDataset(datadir)
 #selection = np.arange(14,32)
 #selection=[]
 #sleep.load(selection, force_reload=False, shuffle=False, chunk_len=3000)
-sleep.load_object()
-stop
-train_data, train_target = sleep.get_train()
-test_data, test_target   = sleep.get_test()
+sleep.load_object('adults.dat')
+sleep.chunk_len = chunk_size
+train_data, train_target, test_data, test_target = sleep.get_intrasub()
+
 
     
     
 #child_data, child_target = sleep.load(children_sel, force_reload=False, shuffle=True, flat=True, chunk_len=chunk_size)
-#train_data, train_target, test_data, test_target = sleep.get_intrasub()
 
 #test_data  = tools.normalize(test_data)
 #train_data = tools.normalize(train_data)
-stop
+
 print('Extracting features')
 train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
 test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_data[:,:,1]), tools.feat_emg(test_data[:,:,2])))
 #child_data = np.hstack( (tools.feat_eeg(child_data[:,:,0]), tools.feat_eog(child_data[:,:,1]), tools.feat_emg(child_data[:,:,2])))
-#train_data =  tools.feat_eeg(train_data[:,:,0])
-#test_data  =  tools.feat_eeg(test_data[:,:,0])
 
 #train_data =   np.hstack([tools.get_freqs(train_data[:,:,0],50),tools.feat_eog(train_data[:,:,1])])
 #test_data  =   np.hstack([tools.get_freqs(test_data[:,:,0], 50),tools.feat_eog(test_data[:,:,1])])
@@ -120,17 +119,22 @@ test_data  = np.hstack( (tools.feat_eeg(test_data[:,:,0]), tools.feat_eog(test_d
 #child_target[child_target==4] = 3
 train_target[train_target==4] = 3
 train_target[train_target==5] = 4
-#train_target[train_target==8]=5
+##train_target[train_target==8]=5
 test_target [test_target==4] = 3
 test_target [test_target==5] = 4
-#test_target [test_target==8]=5
-
-             
+##test_target [test_target==8]=5
+#
+#             
 train_data   = np.delete(train_data, np.where(train_target==8) ,axis=0)     
 train_target = np.delete(train_target, np.where(train_target==8) ,axis=0)     
 test_data = np.delete(test_data, np.where(test_target==8) ,axis=0)     
 test_target = np.delete(test_target, np.where(test_target==8) ,axis=0)     
 
+#train_data = tools.future(train_data,64).reshape([-1,8,65],order='F')
+#test_data = tools.future(test_data,64).reshape([-1,8,65],order='F')
+#
+#train_data = np.expand_dims(train_data,2)
+#test_data  = np.expand_dims(test_data,2)
 #train_target = np.repeat(train_target,3000)
 #test_target = np.repeat(test_target,3000)
 #asd
@@ -146,10 +150,10 @@ test_target = np.delete(test_target, np.where(test_target==8) ,axis=0)
 #del sleep.data
 #del sleep
 #import gc;gc.collect();
-                    
-# normalize features
 test_data    = scipy.stats.mstats.zmap(test_data, train_data)
-train_data   = scipy.stats.mstats.zmap(train_data, train_data)
+train_data   = scipy.stats.mstats.zmap(train_data, train_data)                 
+# normalize features
+
 #del sleep.data
 #test_data = np.expand_dims(test_data, 2)
 
@@ -169,7 +173,7 @@ nout = np.max(training_data.T)+1
 
 
 # Enable/Disable different models here.
-model = Classifier(models.RecurrentNeuralNetwork(nin, neurons, nout, nlayer=layers, link=link))
+#model = Classifier(models.RecurrentNeuralNetwork(nin, neurons, nout, nlayer=layers, link=link))
 #model = Classifier(models.DeepNeuralNetwork(nin, neurons, nout, nlayer=layers))
 model = Classifier(models.WaveNetLike([1, 2, 4, 8, 16], nin, nout))
 
@@ -185,6 +189,7 @@ optimizer.add_hook(chainer.optimizer.GradientClipping(clipping))
 optimizer.add_hook(chainer.optimizer.WeightDecay(decay))
 
 ann = supervised_learning.RecurrentLearner(optimizer, gpu=gpu, cutoff=cutoff)
+#ann = supervised_learning.FeedforwardLearner(optimizer, gpu=gpu)
 
 # Finally we run the optimization
 ann.optimize(training_data, validation_data=validation_data, epochs=epochs)
@@ -225,7 +230,6 @@ print((time.time()-start) / 60.0)
 train_loss = ann.log[('training','loss')][-1]
 test_loss  = ann.log[('validation','loss')][-1]
 np.set_printoptions(precision=2,threshold=np.nan)
-
 save_dict = {'1 Time':time.strftime("%c"),
             'Dataset':datadir,
             'Runtime': "%.2f" % (runtime/60),
