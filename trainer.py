@@ -18,33 +18,6 @@ from sklearn.metrics import accuracy_score
 import time
 
 
-def training_function(network, input_tensor, target_tensor, learning_rate, use_l2_regularization=False):
-    network_output = L.get_output(network)
-    if use_l2_regularization:
-        l2_loss = lasagne.regularization.regularize_network_params(network, lasagne.regularization.l2)
-        loss = lasagne.objectives.categorical_crossentropy(network_output, target_tensor).mean() + (l2_loss * 0.0001)
-    else:
-        loss = lasagne.objectives.categorical_crossentropy(network_output, target_tensor).mean()  
-    pred = T.argmax(network_output, axis=1)
-    network_params  = L.get_all_params(network, trainable=True)
-    weight_updates  = lasagne.updates.adadelta(loss, network_params)
-    return theano.function([input_tensor, target_tensor], [loss, pred], updates=weight_updates)
-
-
-def validate_function(network, input_tensor, target_tensor):
-    network_output = L.get_output(network, deterministic=True)
-    loss = lasagne.objectives.categorical_crossentropy(network_output, target_tensor).mean() 
-#     accuracy = T.mean(T.eq(T.argmax(network_output, axis=1), target_tensor), dtype=theano.config.floatX)
-    pred = T.argmax(network_output, axis=1)
-    return theano.function([input_tensor, target_tensor], [loss, pred])
-
-
-def evaluate_function(network, input_tensor):
-    network_output = lasagne.layers.get_output(network, deterministic=True)
-    pred = T.argmax(network_output, axis=1)
-    return theano.function([input_tensor], [pred, network_output])
-
-
 
 def train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, val_target,
                         test_data, test_target, batch_size= 64, epochs = 100, plotting=False):
@@ -72,7 +45,7 @@ def train(network_name, network, train_fn, val_fn, train_data, train_target, val
         # training        
         tra_losses = []
         tra_preds, tra_targs = [], []
-        for b in tqdm(range(0, n_batch_train+1), leave=False, desc = 'Epoch {}/{}'.format(epoch+1, epochs+1)):
+        for b in tqdm(range(0, n_batch_train+1), leave=False, desc = 'Epoch {}/{}'.format(epoch+1, epochs)):
             X = train_data[b*batch_size:(b+1)*batch_size,:].astype(np.float32) # extract a mini-batch from x_train
             Y = train_target[b*batch_size:(b+1)*batch_size] # extract labels for the mini-batch
             loss, pred = train_fn(X.astype(np.float32), Y.astype(np.int32))
@@ -112,6 +85,7 @@ def train(network_name, network, train_fn, val_fn, train_data, train_target, val
         val_f1_lst.append(val_f1)
     
         #continue
+        per_iter = (time.time() - starttime) / 60
         print('Epoch {}    Train {:.1f}/{:.1f}    Val {:.1f}/{:.1f}    eta: {:.1f} minutes'.format(epoch+1,tra_f1*100,tra_acc*100,val_f1*100,val_acc*100, per_iter*(epochs-epoch)))
         if val_f1 > best_val_acc:
             best_val_acc = val_f1
@@ -132,7 +106,7 @@ def train(network_name, network, train_fn, val_fn, train_data, train_target, val
                         loc='center left', bbox_to_anchor=(1, 0.5))
             plt.title('Best validation f1= {:.2f}%'.format(100. * best_val_acc))
             plt.pause(0.01)
-        per_iter = (time.time() - starttime) / 60
+       
             
             
     npz = np.load(os.path.join('./', network_name+'.npz')) # load stored parameters
