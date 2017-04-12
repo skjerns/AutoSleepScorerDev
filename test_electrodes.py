@@ -135,15 +135,13 @@ accs_rfc_one = []
 f1_rfc_one   = []
 cv = sklearn.model_selection.GroupKFold(folds)
 for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
-    print train_idx
-    print 'asd'
-#    clf.fit(feats[train_idx, 0:8], targets[train_idx])
-#    preds = clf.predict(feats[test_idx, 0:8])
-#    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
-#    acc = accuracy_score(preds, targets[test_idx])
-#    accs_rfc_one.append(f1)
-#    f1_rfc_one.append(acc)
-
+    clf.fit(feats[train_idx, 0:8], targets[train_idx])
+    preds = clf.predict(feats[test_idx, 0:8])
+    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
+    acc = accuracy_score(preds, targets[test_idx])
+    accs_rfc_one.append(f1)
+    f1_rfc_one.append(acc)
+print('{}/{}'.format(np.mean(accs_rfc_one),np.mean(f1_rfc_one)))
 ## all electrodes
 print ('Starting RFC cv 2/2')
 accs_rfc_all = []
@@ -156,6 +154,7 @@ for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
     acc = accuracy_score(preds, targets[test_idx])
     accs_rfc_all.append(f1)
     f1_rfc_all.append(acc)
+print('{}/{}'.format(np.mean(accs_rfc_all),np.mean(f1_rfc_all)))
 
 
 #%% Training routine for CNN
@@ -201,6 +200,8 @@ for train_idx, test_idx in tqdm(cv.split(groups, groups, groups), total = folds)
     
     accs_cnn_one.append(f1)
     f1_cnn_one.append(acc)
+print('{}/{}'.format(np.mean(accs_cnn_one),np.mean(f1_cnn_one)))
+
 #
 ## all electrode
 print ('Starting CNN cv 2/2')
@@ -230,6 +231,7 @@ for train_idx, test_idx in tqdm(cv.split(groups, groups, groups), total = folds)
     
     accs_cnn_all.append(f1)
     f1_cnn_all.append(acc)
+print('{}/{}'.format(np.mean(accs_cnn_all),np.mean(f1_cnn_all)))
 
 np.savez('\results\test_electrodes.npz', accs_cnn_one=accs_cnn_one, f1_cnn_one=f1_cnn_one, accs_cnn_all=accs_cnn_all, f1_cnn_all=f1_cnn_all,
                                          accs_rfc_one=accs_rfc_one, f1_rfc_one=f1_rfc_one, accs_rfc_all=accs_rfc_all, f1_rfc_all=f1_rfc_all)
