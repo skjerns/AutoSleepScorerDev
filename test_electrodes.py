@@ -50,20 +50,19 @@ if os.name == 'posix':
 else:
     datadir = 'c:\\sleep\\data\\'
 #    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
-    datadir = 'C:\\sleep\\corrupted\\'
+    datadir = 'd:\\sleep\\corrupted\\'
 
 sleep = sleeploader.SleepDataset(datadir)
 sleep.load_object()
 data, targets, groups = sleep.get_all_data(groups=True)
+del sleep.data
 # normalize
 data    = scipy.stats.mstats.zmap(data, data , axis = None)
-
 print('Extracting features')
 #train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
 feats = np.hstack( (tools.feat_eeg(data[:,:,0]), tools.feat_eog(data[:,:,1]),tools.feat_emg(data[:,:,2])))
 targets[targets==5] = 4   
-test_data    = np.delete(data, np.where(targets==8) ,axis=0)     
-test_target  = np.delete(targets, np.where(targets==8) ,axis=0) 
+
 data = data.swapaxes(1,2)
 
 if np.sum(np.isnan(data)):print('Warning! NaNs detected')
@@ -124,37 +123,6 @@ def evaluate_function(network, input_tensor):
 
 
 
-#%% Training routine for RFC
-folds = 5
-from sklearn.ensemble import RandomForestClassifier
-clf = RandomForestClassifier(n_estimators=250, n_jobs=3)
-
-## one electrode
-print ('Starting RFC cv 1/2')
-accs_rfc_one = []
-f1_rfc_one   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
-    clf.fit(feats[train_idx, 0:8], targets[train_idx])
-    preds = clf.predict(feats[test_idx, 0:8])
-    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
-    acc = accuracy_score(preds, targets[test_idx])
-    accs_rfc_one.append(f1)
-    f1_rfc_one.append(acc)
-print('{}/{}'.format(np.mean(accs_rfc_one),np.mean(f1_rfc_one)))
-## all electrodes
-print ('Starting RFC cv 2/2')
-accs_rfc_all = []
-f1_rfc_all   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
-    clf.fit(feats[train_idx], targets[train_idx])
-    preds = clf.predict(feats[test_idx])
-    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
-    acc = accuracy_score(preds, targets[test_idx])
-    accs_rfc_all.append(f1)
-    f1_rfc_all.append(acc)
-print('{}/{}'.format(np.mean(accs_rfc_all),np.mean(f1_rfc_all)))
 
 
 #%% Training routine for CNN
@@ -173,11 +141,11 @@ folds = 5
 from sklearn.ensemble import RandomForestClassifier
 
 ## one electrode
-print ('Starting CNN cv 1/2')
-accs_cnn_one = []
-f1_cnn_one   = []
+print ('Starting CNN cv eeg')
+accs_cnn_eeg = []
+f1_cnn_eeg   = []
 cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in tqdm(cv.split(groups, groups, groups), total = folds):
+for train_idx, test_idx in cv.split(groups, groups, groups):
     
     sub_group = groups[train_idx]
     sub_cv = sklearn.model_selection.GroupKFold(folds)
@@ -196,19 +164,79 @@ for train_idx, test_idx in tqdm(cv.split(groups, groups, groups), total = folds)
     train_fn = training_function(network, input_var, target_var, 0.001)
     val_fn =  validate_function(network, input_var, target_var)
     f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=50, batch_size=1024)
+                   val_target, test_data,test_target, epochs=epochs, batch_size=2048)
     
-    accs_cnn_one.append(f1)
-    f1_cnn_one.append(acc)
-print('{}/{}'.format(np.mean(accs_cnn_one),np.mean(f1_cnn_one)))
+    accs_cnn_eeg.append(acc)
+    f1_cnn_eeg.append(f1)
+    
+print('{}/{}'.format(np.mean(accs_cnn_eeg),np.mean(f1_cnn_eeg)))
 
+print ('Starting CNN cv eog')
+accs_cnn_eog = []
+f1_cnn_eog   = []
+cv = sklearn.model_selection.GroupKFold(folds)
+for train_idx, test_idx in cv.split(groups, groups, groups):
+    
+    sub_group = groups[train_idx]
+    sub_cv = sklearn.model_selection.GroupKFold(folds)
+    train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).next()
+    val_idx      = train_idx[val_idx]  
+    train_idx    = train_idx[train_sub_idx]
+    
+    train_data   = data[train_idx,1:2,:]
+    train_target = targets[train_idx]
+    val_data     = data[val_idx,1:2,:]
+    val_target   = targets[val_idx]
+    test_data    = data[test_idx,1:2,:]       
+    test_target  = targets[test_idx]
+
+    network = CNN(train_data.shape, n_classes, input_var)
+    train_fn = training_function(network, input_var, target_var, 0.001)
+    val_fn =  validate_function(network, input_var, target_var)
+    f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
+                   val_target, test_data,test_target, epochs=epochs, batch_size=2048)
+    
+    accs_cnn_eog.append(acc)
+    f1_cnn_eog.append(f1)
+    
+print('{}/{}'.format(np.mean(accs_cnn_eog),np.mean(f1_cnn_eog)))
+
+print ('Starting CNN cv emg')
+accs_cnn_emg = []
+f1_cnn_emg   = []
+cv = sklearn.model_selection.GroupKFold(folds)
+for train_idx, test_idx in cv.split(groups, groups, groups):
+    
+    sub_group = groups[train_idx]
+    sub_cv = sklearn.model_selection.GroupKFold(folds)
+    train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).next()
+    val_idx      = train_idx[val_idx]  
+    train_idx    = train_idx[train_sub_idx]
+    
+    train_data   = data[train_idx,2:3,:]
+    train_target = targets[train_idx]
+    val_data     = data[val_idx,2:3,:]
+    val_target   = targets[val_idx]
+    test_data    = data[test_idx,2:3,:]       
+    test_target  = targets[test_idx]
+
+    network = CNN(train_data.shape, n_classes, input_var)
+    train_fn = training_function(network, input_var, target_var, 0.001)
+    val_fn =  validate_function(network, input_var, target_var)
+    f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
+                   val_target, test_data,test_target, epochs=epochs, batch_size=2048)
+    
+    accs_cnn_emg.append(acc)
+    f1_cnn_emg.append(f1)
+    
+print('{}/{}'.format(np.mean(accs_cnn_emg),np.mean(f1_cnn_emg)))
 #
 ## all electrode
-print ('Starting CNN cv 2/2')
+print ('Starting CNN cv all')
 accs_cnn_all = []
 f1_cnn_all   = []
 cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in tqdm(cv.split(groups, groups, groups), total = folds):
+for train_idx, test_idx in cv.split(groups, groups, groups):
     
     sub_group = groups[train_idx]
     sub_cv = sklearn.model_selection.GroupKFold(folds)
@@ -227,11 +255,80 @@ for train_idx, test_idx in tqdm(cv.split(groups, groups, groups), total = folds)
     train_fn = training_function(network, input_var, target_var, 0.001)
     val_fn =  validate_function(network, input_var, target_var)
     f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=50, batch_size=1024)
+                   val_target, test_data,test_target, epochs=epochs, batch_size=1024)
     
-    accs_cnn_all.append(f1)
-    f1_cnn_all.append(acc)
+    accs_cnn_all.append(acc)
+    f1_cnn_all.append(f1)
 print('{}/{}'.format(np.mean(accs_cnn_all),np.mean(f1_cnn_all)))
+#%% Training routine for RFC
+folds = 5
+from sklearn.ensemble import RandomForestClassifier
+clf = RandomForestClassifier(n_estimators=400, n_jobs=3)
 
-np.savez('\results\test_electrodes.npz', accs_cnn_one=accs_cnn_one, f1_cnn_one=f1_cnn_one, accs_cnn_all=accs_cnn_all, f1_cnn_all=f1_cnn_all,
-                                         accs_rfc_one=accs_rfc_one, f1_rfc_one=f1_rfc_one, accs_rfc_all=accs_rfc_all, f1_rfc_all=f1_rfc_all)
+## eeg electrode
+print ('Starting RFC cv eeg')
+accs_rfc_eeg = []
+f1_rfc_eeg   = []
+cv = sklearn.model_selection.GroupKFold(folds)
+for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
+    clf.fit(feats[train_idx, 0:8], targets[train_idx])
+    preds = clf.predict(feats[test_idx, 0:8])
+    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
+    acc = accuracy_score(preds, targets[test_idx])
+    accs_rfc_eeg.append(acc)
+    f1_rfc_eeg.append(f1)
+print('{}/{}'.format(np.mean(accs_rfc_eeg),np.mean(f1_rfc_eeg)))
+
+## eog electrode
+print ('Starting RFC cv eog')
+accs_rfc_eog = []
+f1_rfc_eog   = []
+cv = sklearn.model_selection.GroupKFold(folds)
+for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
+    clf.fit(feats[train_idx, 8:23], targets[train_idx])
+    preds = clf.predict(feats[test_idx, 8:23])
+    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
+    acc = accuracy_score(preds, targets[test_idx])
+    accs_rfc_eog.append(acc)
+    f1_rfc_eog.append(f1)
+print('{}/{}'.format(np.mean(accs_rfc_eog),np.mean(f1_rfc_eog)))
+
+## emg electrode
+print ('Starting RFC cv emg')
+accs_rfc_emg = []
+f1_rfc_emg   = []
+cv = sklearn.model_selection.GroupKFold(folds)
+for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
+    clf.fit(feats[train_idx, 23:], targets[train_idx])
+    preds = clf.predict(feats[test_idx, 23:])
+    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
+    acc = accuracy_score(preds, targets[test_idx])
+    accs_rfc_emg.append(acc)
+    f1_rfc_emg.append(f1)
+print('{}/{}'.format(np.mean(accs_rfc_emg),np.mean(f1_rfc_emg)))
+
+
+## all electrodes
+print ('Starting RFC cv all')
+accs_rfc_all = []
+f1_rfc_all   = []
+cv = sklearn.model_selection.GroupKFold(folds)
+for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
+    clf.fit(feats[train_idx], targets[train_idx])
+    preds = clf.predict(feats[test_idx])
+    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
+    acc = accuracy_score(preds, targets[test_idx])
+    accs_rfc_all.append(acc)
+    f1_rfc_all.append(f1)
+print('{}/{}'.format(np.mean(accs_rfc_all),np.mean(f1_rfc_all)))
+
+
+np.savez(os.path.join('./' , 'test_electrodes.npz'), 
+         accs_cnn_eeg=accs_cnn_eeg, f1_cnn_eeg=f1_cnn_eeg,
+         accs_cnn_eog=accs_cnn_eog, f1_cnn_eog=f1_cnn_eog,
+         accs_cnn_emg=accs_cnn_emg, f1_cnn_emg=f1_cnn_emg,
+         accs_cnn_all=accs_cnn_all, f1_cnn_all=f1_cnn_all,
+         accs_rfc_eeg=accs_rfc_eeg, f1_rfc_eeg=f1_rfc_eeg, 
+         accs_rfc_eog=accs_rfc_eog, f1_rfc_eog=f1_rfc_eog, 
+         accs_rfc_emg=accs_rfc_emg, f1_rfc_emg=f1_rfc_emg, 
+         accs_rfc_all=accs_rfc_all, f1_rfc_all=f1_rfc_all)
