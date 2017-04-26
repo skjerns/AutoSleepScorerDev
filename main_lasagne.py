@@ -63,7 +63,7 @@ if os.name == 'posix':
 else:
     datadir = 'c:\\sleep\\data\\'
 #    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
-    datadir = 'C:\\sleep\\corrupted\\'
+    datadir = 'd:\\sleep\\corrupted\\'
 
  
  
@@ -258,7 +258,7 @@ def evaluate_function(network, input_tensor):
 #%%
 learning_rate = 0.001
 
-data_size = train_data.shape
+data_size = (1,3,3000) #train_data.shape
 n_classes = len(np.unique(train_target))
 input_var  = T.tensor3('inputs')
 target_var = T.ivector('targets')

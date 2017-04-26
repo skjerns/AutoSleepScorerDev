@@ -131,7 +131,7 @@ n_classes = len(np.unique(targets))
 input_var  = T.tensor3('inputs')
 target_var = T.ivector('targets')
 batch_size = 1280
-epochs = 100
+epochs = 150
 network_name = 'CNN'
 
 
@@ -139,8 +139,8 @@ network_name = 'CNN'
 #                   test_target, test_data,test_target, epochs=50, batch_size=1024)
 folds = 5
 from sklearn.ensemble import RandomForestClassifier
-
-## one electrode
+STOP
+#%%# one electrode
 print ('Starting CNN cv eeg')
 accs_cnn_eeg = []
 f1_cnn_eeg   = []
@@ -164,12 +164,14 @@ for train_idx, test_idx in cv.split(groups, groups, groups):
     train_fn = training_function(network, input_var, target_var, 0.001)
     val_fn =  validate_function(network, input_var, target_var)
     f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=epochs, batch_size=2048)
+                   val_target, test_data,test_target, epochs=epochs, batch_size=batch_size)
     
     accs_cnn_eeg.append(acc)
     f1_cnn_eeg.append(f1)
     
 print('{}/{}'.format(np.mean(accs_cnn_eeg),np.mean(f1_cnn_eeg)))
+np.savez(os.path.join('./' , '1.npz'),accs_cnn_eeg=accs_cnn_eeg,f1_cnn_eeg=f1_cnn_eeg)
+#%%
 
 print ('Starting CNN cv eog')
 accs_cnn_eog = []
@@ -194,13 +196,14 @@ for train_idx, test_idx in cv.split(groups, groups, groups):
     train_fn = training_function(network, input_var, target_var, 0.001)
     val_fn =  validate_function(network, input_var, target_var)
     f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=epochs, batch_size=2048)
+                   val_target, test_data,test_target, epochs=epochs, batch_size=batch_size)
     
     accs_cnn_eog.append(acc)
     f1_cnn_eog.append(f1)
     
 print('{}/{}'.format(np.mean(accs_cnn_eog),np.mean(f1_cnn_eog)))
-
+np.savez(os.path.join('./' , '2.npz'),accs_cnn_eog=accs_cnn_eog,f1_cnn_eog=f1_cnn_eog)
+#%%
 print ('Starting CNN cv emg')
 accs_cnn_emg = []
 f1_cnn_emg   = []
@@ -224,12 +227,14 @@ for train_idx, test_idx in cv.split(groups, groups, groups):
     train_fn = training_function(network, input_var, target_var, 0.001)
     val_fn =  validate_function(network, input_var, target_var)
     f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=epochs, batch_size=2048)
+                   val_target, test_data,test_target, epochs=epochs, batch_size=batch_size)
     
     accs_cnn_emg.append(acc)
     f1_cnn_emg.append(f1)
     
 print('{}/{}'.format(np.mean(accs_cnn_emg),np.mean(f1_cnn_emg)))
+np.savez(os.path.join('./' , '3.npz'),accs_cnn_emg=accs_cnn_emg,f1_cnn_emg=f1_cnn_emg)
+#%%
 #
 ## all electrode
 print ('Starting CNN cv all')
@@ -255,11 +260,13 @@ for train_idx, test_idx in cv.split(groups, groups, groups):
     train_fn = training_function(network, input_var, target_var, 0.001)
     val_fn =  validate_function(network, input_var, target_var)
     f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=epochs, batch_size=1024)
+                   val_target, test_data,test_target, epochs=epochs, batch_size=batch_size/2)
     
     accs_cnn_all.append(acc)
     f1_cnn_all.append(f1)
 print('{}/{}'.format(np.mean(accs_cnn_all),np.mean(f1_cnn_all)))
+np.savez(os.path.join('./' , '4.npz'),accs_cnn_all=accs_cnn_all,f1_cnn_all=f1_cnn_all)
+
 #%% Training routine for RFC
 folds = 5
 from sklearn.ensemble import RandomForestClassifier
