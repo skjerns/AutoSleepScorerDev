@@ -23,17 +23,69 @@ import re
 use_sfreq=128.0
 
 
-def normalize(input_directory, output_directory):
-    """
-    Takes all EEG files in the directory and does the following:
-    - Remove all unused headers
-    - Resample to 100hz
-    """   
-    eeg_files = [s for s in os.listdir(input_directory) if s.endswith(('.vhdr','rec','edf'))]
-    for eeg_file in eeg_files:
-        header = load_eeg_header( os.path.join( input_directory, eeg_file), preload=True)
-        trim_channels(header, sleeploader.SleepDataset.channels)
-        header = header.resample(100.0)
+
+
+def normalize_eeg(array):
+    '''
+    - takes the log1,3 to remove large values
+    - divides by the standard deviation
+    '''
+    
+def save_results(**kwargs):
+    
+    np.set_printoptions(precision=2,threshold=np.nan)
+    save_dict =dict()
+    save_dict = {'1 Time':time.strftime("%c"),
+            'Dataset':datadir,
+            'Runtime': "%.2f" % (runtime/60),
+            '5 Layers':layers,
+            '10 Neurons':neurons,
+            '15 Epochs':epochs,
+            'Clipping':clipping,
+            'Weightdecay':decay,
+            'Batch-Size':batch_size,
+            'Cutoff':cutoff,
+            '20 Train-Acc':"%.3f" % train_acc,
+            '21 Val-Acc':"%.3f" % test_acc,
+            'Train-Loss':"%.5f" %train_loss,
+            'Val-Loss':"%.5f" %test_loss,
+            '30 Comment':comment,
+            'Selection':str(len(selection)) + ' in ' + str(selection) ,
+            'Shape':str(train_data.shape) ,
+            'Link':str(link),
+            'Report':classreport,
+            '22 Train-F1':"%.3f" %  train_f1,
+            '27 Val-F1':"%.3f" %  test_f1,
+            'Train-Confusion': str(train_conf),
+            'Val-Confusion':  str(test_conf),
+            'NLabels' : str(np.unique(T)),
+            '29 Chunksize': str(chunk_size),
+            '2 Number': counter,
+            'Future': future
+                      }
+
+    np.set_printoptions(precision=2,threshold=1000)
+    append_json('experiments.json', save_dict)
+    jsondict2csv('experiments.json', 'experiments.csv')
+    
+    
+def convert_Y_to_seq_batches(Y, batch_size):
+    if (len(Y)%batch_size)!= 0: Y = Y[:-(len(Y)%batch_size)]
+    idx = np.arange(len(Y))
+    idx = idx.reshape([batch_size,-1]).flatten('F')
+    return Y[idx]
+
+#def normalize(input_directory, output_directory):
+#    """
+#    Takes all EEG files in the directory and does the following:
+#    - Remove all unused headers
+#    - Resample to 100hz
+#    """   
+#    eeg_files = [s for s in os.listdir(input_directory) if s.endswith(('.vhdr','rec','edf'))]
+#    for eeg_file in eeg_files:
+#        header = load_eeg_header( os.path.join( input_directory, eeg_file), preload=True)
+#        trim_channels(header, sleeploader.SleepDataset.channels)
+#        header = header.resample(100.0)
 
 def label_to_one_hot(y):
     '''
@@ -235,24 +287,26 @@ def jsondict2csv(json_file, csv_file):
     key_set = set()
     dict_list = list()
     try:
-        with open(json_file) as f:
+        with open(json_file,'r') as f:
             for line in f:
                 dic = json.loads(line)
-                map(key_set.add,dic.keys())
+                key_set.update(dic.keys())
                 dict_list.append(dic)
-        keys = list(sorted(key_set, key = natural_key))
+        keys = list(sorted(list(key_set), key = natural_key))
     
-        with open(csv_file, 'wb') as f:
-            w = csv.DictWriter(f, keys, delimiter=';')
+        with open(csv_file, 'w') as f:
+            w = csv.DictWriter(f, keys, delimiter=';', lineterminator='\n')
             w.writeheader()
             w.writerows(dict_list)
     except IOError:
         print('could not convert to csv-file. ')
+        
     
 def append_json(json_filename, dic):
     with open(json_filename, 'a') as f:
         json.dump(dic, f)
         f.write('\n')    
+        
 
 def memory():
     from wmi import WMI
