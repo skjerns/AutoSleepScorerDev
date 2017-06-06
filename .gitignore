@@ -1,2 +1,6 @@
 __pycache__
 *.pyc
+*.npy
+*.npz
+*.pkl
+/archive

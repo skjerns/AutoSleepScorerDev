@@ -1,37 +1,25 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Apr 12 13:53:58 2017
-
-## this script does cross validation on the RFC and the CNN
-## here I test how much better several electrodes are compared to one.
-
-@author: Simon
+This is python 3 code
+main script for training/classifying
 """
-
-
 if not '__file__' in vars(): __file__= u'C:/Users/Simon/dropbox/Uni/Masterthesis/AutoSleepScorer/main.py'
-import os, sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))+'/ANN')
-import numpy as np
-import lasagne
-from tqdm import tnrange, tqdm
-from lasagne import layers as L
-from theano import tensor as T
-import theano
-#from custom_analysis import Analysis
-import matplotlib.pyplot as plt
-from sklearn.metrics import f1_score
-from sklearn.metrics import accuracy_score
-if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
-import tools
-import sklearn
-from sklearn import metrics
-from sklearn.preprocessing import scale
+import os
+import gc; gc.collect()
 import matplotlib
-import trainer
+matplotlib.use('Agg')
 
-matplotlib.rcParams['figure.figsize'] = (10, 3)
+import keras
+import tools
+import pickle
 import scipy
+import models
+import numpy as np
+from keras_utils import cv
+if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
+import matplotlib; matplotlib.rcParams['figure.figsize'] = (10, 3)
+np.random.seed(42)
+
 try:
     with open('count') as f:
         counter = int(f.read())
@@ -40,302 +28,95 @@ except IOError:
     counter = 0
      
 with open('count', 'w') as f:
-  f.write(str(counter+1))      
-  
+  f.write(str(counter+1))        
+
+#%%
 if os.name == 'posix':
-    datadir  = '/home/simon/sleep/'
-#    datadir  = '/home/simon/vinc/'
-    datadir = '/media/simon/Windows/sleep/corrupted'
+    datadir  = '../'
 
 else:
     datadir = 'c:\\sleep\\data\\'
 #    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
     datadir = 'd:\\sleep\\corrupted\\'
 
-sleep = sleeploader.SleepDataset(datadir)
-sleep.load_object()
-data, targets, groups = sleep.get_all_data(groups=True)
-del sleep.data
-# normalize
-data    = scipy.stats.mstats.zmap(data, data , axis = None)
+def load_data(tsinalis=False):
+    global sleep
+    global data
+    sleep = sleeploader.SleepDataset(datadir)
+    if 'data' in vars():  
+        del data; 
+        gc.collect()
+    if not sleep.loaded: sleep.load_object()
+
+    data, target, groups = sleep.get_all_data(groups=True)
+
+    data    = scipy.stats.mstats.zscore(data , axis = None)
+
+    target[target==5] = 4
+
+    target[target==8] = 0
+    target = keras.utils.to_categorical(target)
+    if tsinalis:
+        data = data[:,:,0]
+        data = tools.future(data,4)
+        data = np.expand_dims(data,-1)
+        data = np.expand_dims(data,1)
+    return data, target, groups
+    
+#data,target,groups = load_data()
+#%%
+
 print('Extracting features')
-#train_data = np.hstack( (tools.feat_eeg(train_data[:,:,0]), tools.feat_eog(train_data[:,:,1]),tools.feat_emg(train_data[:,:,2])))
-feats = np.hstack( (tools.feat_eeg(data[:,:,0]), tools.feat_eog(data[:,:,1]),tools.feat_emg(data[:,:,2])))
-targets[targets==5] = 4   
+target = np.load('target.npy')
+groups = np.load('groups.npy')
+feats_eeg = np.load('feats_eeg.npy') # tools.feat_eeg(data[:,:,0])
+feats_eog = np.load('feats_eog.npy') #tools.feat_eog(data[:,:,1])
+feats_emg = np.load('feats_emg.npy') #tools.feat_emg(data[:,:,2])
+feats = np.hstack([feats_eeg, feats_eog, feats_emg])
 
-data = data.swapaxes(1,2)
+# 
+if 'data' in vars():
+    if np.sum(np.isnan(data)) or np.sum(np.isnan(data)):print('Warning! NaNs detected')
 
-if np.sum(np.isnan(data)):print('Warning! NaNs detected')
-
-#%%
-def CNN(data_size, n_classes, input_var):
-    network = L.InputLayer(shape=(None, data_size[1], data_size[2]), input_var=input_var)
-    print network.output_shape
-    network = L.Conv1DLayer( network, num_filters=50, filter_size = 50, stride = 10, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.batch_norm(network)
-    network = L.DropoutLayer(network, p=0.2)
-    network = L.Conv1DLayer( network, num_filters=100, filter_size = 5, stride = 1, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.DropoutLayer(network, p=0.2)
-    network = L.batch_norm(network)
-    network = L.MaxPool1DLayer(network, pool_size = (5), stride = (2))
-    
-    network = L.Conv1DLayer( network, num_filters=100, filter_size = 5, stride = 2, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.DropoutLayer(network, p=0.2)
-    network = L.batch_norm(network)
-    network = L.MaxPool1DLayer(network, pool_size = (5), stride = (2))
-    
-    print network.output_shape
-    network = L.DenseLayer( network, num_units=500, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.batch_norm(network)
-    network = L.DropoutLayer(network, p=0.5)
-    network = L.DenseLayer( network, num_units=500, W=lasagne.init.HeNormal(), nonlinearity=lasagne.nonlinearities.elu)
-    network = L.batch_norm(network)
-    network = L.DropoutLayer(network, p=0.5)
-    print network.output_shape
-
-    network = L.DenseLayer( network, num_units=n_classes,W=lasagne.init.GlorotNormal(),      nonlinearity=lasagne.nonlinearities.softmax)
-    return network
-
-def training_function(network, input_tensor, target_tensor, learning_rate, use_l2_regularization=False):
-    network_output = L.get_output(network)
-    if use_l2_regularization:
-        l2_loss = lasagne.regularization.regularize_network_params(network, lasagne.regularization.l2)
-        loss = lasagne.objectives.categorical_crossentropy(network_output, target_tensor).mean() + (l2_loss * 0.0001)
-    else:
-        loss = lasagne.objectives.categorical_crossentropy(network_output, target_tensor).mean()  
-    pred = T.argmax(network_output, axis=1)
-    network_params  = L.get_all_params(network, trainable=True)
-    weight_updates  = lasagne.updates.adadelta(loss, network_params)
-    return theano.function([input_tensor, target_tensor], [loss, pred], updates=weight_updates)
-
-
-def validate_function(network, input_tensor, target_tensor):
-    network_output = L.get_output(network, deterministic=True)
-    loss = lasagne.objectives.categorical_crossentropy(network_output, target_tensor).mean() 
-#     accuracy = T.mean(T.eq(T.argmax(network_output, axis=1), target_tensor), dtype=theano.config.floatX)
-    pred = T.argmax(network_output, axis=1)
-    return theano.function([input_tensor, target_tensor], [loss, pred])
-
-
-def evaluate_function(network, input_tensor):
-    network_output = lasagne.layers.get_output(network, deterministic=True)
-    return theano.function([input_tensor], network_output)
-
-
-
-
-
-#%% Training routine for CNN
-
-n_classes = len(np.unique(targets))
-input_var  = T.tensor3('inputs')
-target_var = T.ivector('targets')
-batch_size = 1280
-epochs = 150
-network_name = 'CNN'
-
-
-#aa = trainer.train('test', network,train_fn, val_fn, train_data, train_target, test_data, 
-#                   test_target, test_data,test_target, epochs=50, batch_size=1024)
-folds = 5
-from sklearn.ensemble import RandomForestClassifier
-STOP
-#%%# one electrode
-print ('Starting CNN cv eeg')
-accs_cnn_eeg = []
-f1_cnn_eeg   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in cv.split(groups, groups, groups):
-    
-    sub_group = groups[train_idx]
-    sub_cv = sklearn.model_selection.GroupKFold(folds)
-    train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).next()
-    val_idx      = train_idx[val_idx]  
-    train_idx    = train_idx[train_sub_idx]
-    
-    train_data   = data[train_idx,0:1,:]
-    train_target = targets[train_idx]
-    val_data     = data[val_idx,0:1,:]
-    val_target   = targets[val_idx]
-    test_data    = data[test_idx,0:1,:]       
-    test_target  = targets[test_idx]
-
-    network = CNN(train_data.shape, n_classes, input_var)
-    train_fn = training_function(network, input_var, target_var, 0.001)
-    val_fn =  validate_function(network, input_var, target_var)
-    f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=epochs, batch_size=batch_size)
-    
-    accs_cnn_eeg.append(acc)
-    f1_cnn_eeg.append(f1)
-    
-print('{}/{}'.format(np.mean(accs_cnn_eeg),np.mean(f1_cnn_eeg)))
-np.savez(os.path.join('./' , '1.npz'),accs_cnn_eeg=accs_cnn_eeg,f1_cnn_eeg=f1_cnn_eeg)
-#%%
-
-print ('Starting CNN cv eog')
-accs_cnn_eog = []
-f1_cnn_eog   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in cv.split(groups, groups, groups):
-    
-    sub_group = groups[train_idx]
-    sub_cv = sklearn.model_selection.GroupKFold(folds)
-    train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).next()
-    val_idx      = train_idx[val_idx]  
-    train_idx    = train_idx[train_sub_idx]
-    
-    train_data   = data[train_idx,1:2,:]
-    train_target = targets[train_idx]
-    val_data     = data[val_idx,1:2,:]
-    val_target   = targets[val_idx]
-    test_data    = data[test_idx,1:2,:]       
-    test_target  = targets[test_idx]
-
-    network = CNN(train_data.shape, n_classes, input_var)
-    train_fn = training_function(network, input_var, target_var, 0.001)
-    val_fn =  validate_function(network, input_var, target_var)
-    f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=epochs, batch_size=batch_size)
-    
-    accs_cnn_eog.append(acc)
-    f1_cnn_eog.append(f1)
-    
-print('{}/{}'.format(np.mean(accs_cnn_eog),np.mean(f1_cnn_eog)))
-np.savez(os.path.join('./' , '2.npz'),accs_cnn_eog=accs_cnn_eog,f1_cnn_eog=f1_cnn_eog)
-#%%
-print ('Starting CNN cv emg')
-accs_cnn_emg = []
-f1_cnn_emg   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in cv.split(groups, groups, groups):
-    
-    sub_group = groups[train_idx]
-    sub_cv = sklearn.model_selection.GroupKFold(folds)
-    train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).next()
-    val_idx      = train_idx[val_idx]  
-    train_idx    = train_idx[train_sub_idx]
-    
-    train_data   = data[train_idx,2:3,:]
-    train_target = targets[train_idx]
-    val_data     = data[val_idx,2:3,:]
-    val_target   = targets[val_idx]
-    test_data    = data[test_idx,2:3,:]       
-    test_target  = targets[test_idx]
-
-    network = CNN(train_data.shape, n_classes, input_var)
-    train_fn = training_function(network, input_var, target_var, 0.001)
-    val_fn =  validate_function(network, input_var, target_var)
-    f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=epochs, batch_size=batch_size)
-    
-    accs_cnn_emg.append(acc)
-    f1_cnn_emg.append(f1)
-    
-print('{}/{}'.format(np.mean(accs_cnn_emg),np.mean(f1_cnn_emg)))
-np.savez(os.path.join('./' , '3.npz'),accs_cnn_emg=accs_cnn_emg,f1_cnn_emg=f1_cnn_emg)
-#%%
 #
-## all electrode
-print ('Starting CNN cv all')
-accs_cnn_all = []
-f1_cnn_all   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in cv.split(groups, groups, groups):
-    
-    sub_group = groups[train_idx]
-    sub_cv = sklearn.model_selection.GroupKFold(folds)
-    train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).next()
-    val_idx      = train_idx[val_idx]  
-    train_idx    = train_idx[train_sub_idx]
-    
-    train_data   = data[train_idx]
-    train_target = targets[train_idx]
-    val_data     = data[val_idx]
-    val_target   = targets[val_idx]
-    test_data    = data[test_idx]       
-    test_target  = targets[test_idx]
-    
-    network = CNN(train_data.shape, n_classes, input_var)
-    train_fn = training_function(network, input_var, target_var, 0.001)
-    val_fn =  validate_function(network, input_var, target_var)
-    f1, acc = trainer.train(network_name, network, train_fn, val_fn, train_data, train_target, val_data, 
-                   val_target, test_data,test_target, epochs=epochs, batch_size=batch_size/2)
-    
-    accs_cnn_all.append(acc)
-    f1_cnn_all.append(f1)
-print('{}/{}'.format(np.mean(accs_cnn_all),np.mean(f1_cnn_all)))
-np.savez(os.path.join('./' , '4.npz'),accs_cnn_all=accs_cnn_all,f1_cnn_all=f1_cnn_all)
+#%%
+print("starting")
 
-#%% Training routine for RFC
-folds = 5
-from sklearn.ensemble import RandomForestClassifier
-clf = RandomForestClassifier(n_estimators=400, n_jobs=3)
-
-## eeg electrode
-print ('Starting RFC cv eeg')
-accs_rfc_eeg = []
-f1_rfc_eeg   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
-    clf.fit(feats[train_idx, 0:8], targets[train_idx])
-    preds = clf.predict(feats[test_idx, 0:8])
-    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
-    acc = accuracy_score(preds, targets[test_idx])
-    accs_rfc_eeg.append(acc)
-    f1_rfc_eeg.append(f1)
-print('{}/{}'.format(np.mean(accs_rfc_eeg),np.mean(f1_rfc_eeg)))
-
-## eog electrode
-print ('Starting RFC cv eog')
-accs_rfc_eog = []
-f1_rfc_eog   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
-    clf.fit(feats[train_idx, 8:23], targets[train_idx])
-    preds = clf.predict(feats[test_idx, 8:23])
-    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
-    acc = accuracy_score(preds, targets[test_idx])
-    accs_rfc_eog.append(acc)
-    f1_rfc_eog.append(f1)
-print('{}/{}'.format(np.mean(accs_rfc_eog),np.mean(f1_rfc_eog)))
-
-## emg electrode
-print ('Starting RFC cv emg')
-accs_rfc_emg = []
-f1_rfc_emg   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
-    clf.fit(feats[train_idx, 23:], targets[train_idx])
-    preds = clf.predict(feats[test_idx, 23:])
-    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
-    acc = accuracy_score(preds, targets[test_idx])
-    accs_rfc_emg.append(acc)
-    f1_rfc_emg.append(f1)
-print('{}/{}'.format(np.mean(accs_rfc_emg),np.mean(f1_rfc_emg)))
+result = dict()
+comment = 'testing_electrodes'
+print(comment)
 
 
-## all electrodes
-print ('Starting RFC cv all')
-accs_rfc_all = []
-f1_rfc_all   = []
-cv = sklearn.model_selection.GroupKFold(folds)
-for train_idx, test_idx in tqdm(cv.split(data, targets, groups), total = folds):
-    clf.fit(feats[train_idx], targets[train_idx])
-    preds = clf.predict(feats[test_idx])
-    f1  = f1_score(preds, targets[test_idx], average = 'macro' )
-    acc = accuracy_score(preds, targets[test_idx])
-    accs_rfc_all.append(acc)
-    f1_rfc_all.append(f1)
-print('{}/{}'.format(np.mean(accs_rfc_all),np.mean(f1_rfc_all)))
+##%% 
+epochs = 2000
+batch_size = 4048 * 2
+val_batch_size = 30000
+#
+result['feat_eeg'] = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=100, plot=True)
+result['feat_eog'] = cv(np.hstack([feats_eeg,feats_eog]), target, groups, models.ann, name = 'eeg+eog', stop_after=100)  
+result['feat_emg'] = cv(np.hstack([feats_eeg,feats_emg]), target, groups, models.ann, name = 'eeg+emg', stop_after=100) 
+result['feat_all'] = cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann, name = 'all', stop_after=100) 
+
+with open('results_electrodes.pkl', 'wb') as f:
+            pickle.dump(result, f)
+##%% 
+batch_size = 1440    
+val_batch_size = 1440
+epochs = 250
+
+result['cnn_eeg'] = cv(data[:,:,0:1], target, groups, models.cnn3adam, name = 'eeg', stop_after=25)
+result['cnn_eog'] = cv(data[:,:,0:2], target, groups, models.cnn3adam, name = 'eeg+eog', stop_after=25)  
+result['cnn_emg'] = cv(data[:,:,[0,2]], target, groups, models.cnn3adam, name = 'eeg+emg', stop_after=25) 
+result['cnn_all_morefilter'] = cv(data[:,:,:], target, groups, models.cnn3adam_filter, name = 'all_morefilter', stop_after=25) 
+with open('results_electrodes_morefilter.pkl', 'wb') as f:
+            pickle.dump(result, f)
+            
 
 
-np.savez(os.path.join('./' , 'test_electrodes.npz'), 
-         accs_cnn_eeg=accs_cnn_eeg, f1_cnn_eeg=f1_cnn_eeg,
-         accs_cnn_eog=accs_cnn_eog, f1_cnn_eog=f1_cnn_eog,
-         accs_cnn_emg=accs_cnn_emg, f1_cnn_emg=f1_cnn_emg,
-         accs_cnn_all=accs_cnn_all, f1_cnn_all=f1_cnn_all,
-         accs_rfc_eeg=accs_rfc_eeg, f1_rfc_eeg=f1_rfc_eeg, 
-         accs_rfc_eog=accs_rfc_eog, f1_rfc_eog=f1_rfc_eog, 
-         accs_rfc_emg=accs_rfc_emg, f1_rfc_emg=f1_rfc_emg, 
-         accs_rfc_all=accs_rfc_all, f1_rfc_all=f1_rfc_all)
+
+
+
+
+
+
+

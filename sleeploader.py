@@ -6,7 +6,9 @@ import numpy.random as random
 import tools
 from scipy.signal import resample
 import csv
-import cPickle
+import _pickle as cPickle
+#import pickle as cPickle
+#import cPickle
 import mne
 
 def natural_key(string_):
@@ -208,7 +210,7 @@ class SleepDataset(Singleton):
         """
         if path == None: path = self.directory
         with open(os.path.join(path, filename), 'rb') as f:
-            self.hypno, self.hypno_files = cPickle.load(f)
+            self.hypno, self.hypno_files = cPickle.load(f, encoding='latin1')
             self.subjects = zip(self.eeg_files,self.hypno_files)
             if len(self.hypno) != len(self.data): 
                 print('WARNING: {} EEG files and {} Hypno files'.format(len(self.eeg_files),len(self.hypno)))
@@ -234,7 +236,7 @@ class SleepDataset(Singleton):
         """
         if path == None: path = self.directory
         with open(os.path.join(path, filename), 'rb') as f:
-            tmp_dict = cPickle.load(f)
+            tmp_dict = cPickle.load(f, fix_imports=True, encoding='latin1' )
         self.__dict__.update(tmp_dict)
 
 

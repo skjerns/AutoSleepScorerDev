@@ -10,6 +10,9 @@ These are tools for the AutoSleepScorer.
 import csv
 import numpy as np
 import os.path
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 #import pyfftw
 from scipy import fft
 from scipy import stats
@@ -20,60 +23,41 @@ import json
 import os
 import re
 
-use_sfreq=128.0
+use_sfreq=100.0
 
 
 
-
-def normalize_eeg(array):
-    '''
-    - takes the log1,3 to remove large values
-    - divides by the standard deviation
-    '''
-    
-def save_results(**kwargs):
-    
-    np.set_printoptions(precision=2,threshold=np.nan)
-    save_dict =dict()
-    save_dict = {'1 Time':time.strftime("%c"),
-            'Dataset':datadir,
-            'Runtime': "%.2f" % (runtime/60),
-            '5 Layers':layers,
-            '10 Neurons':neurons,
-            '15 Epochs':epochs,
-            'Clipping':clipping,
-            'Weightdecay':decay,
-            'Batch-Size':batch_size,
-            'Cutoff':cutoff,
-            '20 Train-Acc':"%.3f" % train_acc,
-            '21 Val-Acc':"%.3f" % test_acc,
-            'Train-Loss':"%.5f" %train_loss,
-            'Val-Loss':"%.5f" %test_loss,
-            '30 Comment':comment,
-            'Selection':str(len(selection)) + ' in ' + str(selection) ,
-            'Shape':str(train_data.shape) ,
-            'Link':str(link),
-            'Report':classreport,
-            '22 Train-F1':"%.3f" %  train_f1,
-            '27 Val-F1':"%.3f" %  test_f1,
-            'Train-Confusion': str(train_conf),
-            'Val-Confusion':  str(test_conf),
-            'NLabels' : str(np.unique(T)),
-            '29 Chunksize': str(chunk_size),
-            '2 Number': counter,
-            'Future': future
-                      }
-
-    np.set_printoptions(precision=2,threshold=1000)
-    append_json('experiments.json', save_dict)
-    jsondict2csv('experiments.json', 'experiments.csv')
-    
+def confmat_to_numpy(confmat_str):
+    rows = confmat_str.split('] [')
+    new_array = []
+    for s in rows:
+        s = s.replace('[[','')
+        s = s.replace(']]','')
+        s = s.split(' ')
+        s = [int(x) for x in s if x is not '']
+        new_array.append(s)
+    return np.array(new_array)
+        
     
 def convert_Y_to_seq_batches(Y, batch_size):
     if (len(Y)%batch_size)!= 0: Y = Y[:-(len(Y)%batch_size)]
     idx = np.arange(len(Y))
     idx = idx.reshape([batch_size,-1]).flatten('F')
     return Y[idx]
+
+
+def sequences(data, targets, seqlen)
+    '''
+    Creates time-sequences with overlap (sliding window)
+    '''
+    if seqlen==0: return data
+    assert signals.shape[0] > fsteps, 'Future steps must be smaller than number of datapoints'
+    if signals.ndim == 2: signals = np.expand_dims(signals,2) 
+    nsamp = signals.shape[1]
+    new_signals = np.zeros((signals.shape[0],signals.shape[1]*(fsteps+1), signals.shape[2]),dtype=np.float32)
+    for i in np.arange(fsteps+1):
+        new_signals[:,i*nsamp:(i+1)*nsamp,:] = np.roll(signals[:,:,:],-i,axis=0)
+    return new_signals.squeeze() if new_signals.shape[2]==1 else new_signals
 
 #def normalize(input_directory, output_directory):
 #    """
@@ -140,7 +124,7 @@ def feat_eeg(signals):
     
     sfreq = use_sfreq
     nsamp = float(signals.shape[1])
-    feats = np.zeros((signals.shape[0],8),dtype='float32')
+    feats = np.zeros((signals.shape[0],9),dtype='float32')
     # 5 FEATURE for freq babnds
     w = (fft(signals,axis=1)).real
     delta = np.sum(np.abs(w[:,np.arange(0.5*nsamp/sfreq,4*nsamp/sfreq, dtype=int)]),axis=1)
@@ -148,17 +132,20 @@ def feat_eeg(signals):
     alpha = np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,13*nsamp/sfreq, dtype=int)]),axis=1)
     beta  = np.sum(np.abs(w[:,np.arange(13*nsamp/sfreq,20*nsamp/sfreq, dtype=int)]),axis=1)
     gamma = np.sum(np.abs(w[:,np.arange(20*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),axis=1)   # only until 50, because hz=100
-    sum_abs_pow = delta + theta + alpha + beta + gamma
+    spindle = np.sum(np.abs(w[:,np.arange(12*nsamp/sfreq,14*nsamp/sfreq, dtype=int)]),axis=1)
+    sum_abs_pow = delta + theta + alpha + beta + gamma + spindle
     feats[:,0] = delta /sum_abs_pow
     feats[:,1] = theta /sum_abs_pow
     feats[:,2] = alpha /sum_abs_pow
     feats[:,3] = beta  /sum_abs_pow
     feats[:,4] = gamma /sum_abs_pow
-    feats[:,5] = np.log10(stats.kurtosis(signals,fisher=False,axis=1))        # kurtosis
-    feats[:,6] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
+    feats[:,5] = spindle /sum_abs_pow
+    feats[:,6] = np.log10(stats.kurtosis(signals,fisher=False,axis=1))        # kurtosis
+    feats[:,7] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
     #feats[:,7] = np.polynomial.polynomial.polyfit(np.log(f[np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]), np.log(w[0,np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),1)
-    feats[:,7] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5)
+    feats[:,8] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5)
     return np.nan_to_num(feats)
+
 
 
 def feat_wavelet(signals):
@@ -216,10 +203,10 @@ def feat_eog(signals):
     feats[:,5] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5) #smean
     feats[:,6] = np.max(signals, axis=1)    #PAV
     feats[:,7] = np.min(signals, axis=1)    #VAV   
-    feats[:,8] = np.argmax(signals, axis=1) #PAP
-    feats[:,9] = np.argmin(signals, axis=1) #VAP
+    feats[:,8] = np.argmax(signals, axis=1)/nsamp #PAP
+    feats[:,9] = np.argmin(signals, axis=1)/nsamp #VAP
     feats[:,10] = np.sum(np.abs(signals), axis=1)/ np.mean(np.sum(np.abs(signals), axis=1)) # AUC
-    feats[:,11] = np.sum(((np.roll(np.sign(signals), 1,axis=1) - np.sign(signals)) != 0).astype(int),axis=1) #TVC
+    feats[:,11] = np.sum(((np.roll(np.sign(signals), 1,axis=1) - np.sign(signals)) != 0).astype(int),axis=1)/nsamp #TVC
     feats[:,12] = np.log10(np.std(signals, axis=1)) #STD/VAR
     feats[:,13] = np.log10(stats.kurtosis(signals,fisher=False,axis=1))       # kurtosis
     feats[:,14] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
@@ -277,7 +264,16 @@ def get_features(data):
         
         pass
     
-
+def save_results(save_dict=None, **kwargs):
+    np.set_printoptions(precision=2,threshold=np.nan)
+    if save_dict==None:
+        save_dict=kwargs
+    for key in save_dict.keys():
+        save_dict[key] = str(save_dict[key])
+    np.set_printoptions(precision=2,threshold=1000)
+    append_json('experiments.json', save_dict)
+    jsondict2csv('experiments.json', 'experiments.csv')
+    
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]      
@@ -306,7 +302,21 @@ def append_json(json_filename, dic):
     with open(json_filename, 'a') as f:
         json.dump(dic, f)
         f.write('\n')    
-        
+
+
+def plot_confusion_matrix(fname, conf_mat, target_names,
+                          title='Confusion matrix', cmap='Blues', perc=True):
+    """Plot Confusion Matrix."""
+    cm = conf_mat
+    cm = 100 * cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    df = pd.DataFrame(data=cm, columns=target_names, index=target_names)
+    g  = sns.heatmap(df, annot=True if perc else conf_mat , fmt=".1f" if perc else ".0f",
+                     linewidths=.5, vmin=0, vmax=100, cmap=cmap)    
+    g.set_title(title)
+    g.set_ylabel('True label')
+    g.set_xlabel('Predicted label')
+    g.figure.savefig('.//results//' + fname)
+
 
 def memory():
     from wmi import WMI
@@ -401,6 +411,8 @@ def trim_channels(data, channels):
                     data.rename_channels(dict({ch:'EEG'}))
                     break       
         data.drop_channels(to_drop)
+        
+        
 def load_eeg_header(filename, dataformat = '', **kwargs):            # CHECK include kwargs
         dataformats = dict({
                             #'bin' :'artemis123',
