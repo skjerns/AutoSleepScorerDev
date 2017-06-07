@@ -7,12 +7,13 @@ Created on Sun May 28 14:09:09 2017
 import keras
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, BatchNormalization, Activation
-from keras.layers import LSTM, Reshape,Permute
+from keras.layers import LSTM, Reshape,Permute, TimeDistributed
 from keras.layers import MaxPooling2D, Conv2D, Conv1D, MaxPooling1D
 from keras.optimizers import Adadelta, RMSprop, Adam
 #input_shape=[3000,3]
 #n_classes=5
 
+#%%
 
 
 def cnn3adam(input_shape, n_classes):
@@ -75,18 +76,9 @@ def cnn3adam_filter(input_shape, n_classes):
     model.compile(loss='categorical_crossentropy', optimizer=Adam())
     return model
 
-def feat(input_shape, n_classes, layers=2, neurons=80, dropout=0.5 ):
-    """
-    for working with extracted features
-    """
-    model = Sequential(name='feat')
-    for l in range(layers):
-        model.add(Dense (neurons, input_shape=input_shape, activation='elu', kernel_initializer='he_normal'))
-        model.add(BatchNormalization())
-        model.add(Dropout(dropout))
-    model.add(Dense(n_classes, activation = 'softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer=Adam())
-    return model
+
+
+
 
 def ann(input_shape, n_classes, layers=2, neurons=80, dropout=0.35 ):
     """
@@ -97,6 +89,61 @@ def ann(input_shape, n_classes, layers=2, neurons=80, dropout=0.35 ):
         model.add(Dense (neurons, input_shape=input_shape, activation='elu', kernel_initializer='he_normal'))
         model.add(BatchNormalization())
         model.add(Dropout(dropout))
+    model.add(Dense(n_classes, activation = 'softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
+    return model
+
+#%% everyhing recurrent
+def pure_rnn_do(input_shape, n_classes):
+    """
+    just replace ANN by RNNs
+    """
+    model = Sequential(name='pure_rnn_do')
+    model.add(LSTM(80, return_sequences=True, input_shape=input_shape, recurrent_dropout=0.2))
+    model.add(Dropout(0.3))
+    model.add(LSTM(80, return_sequences=False, recurrent_dropout=0.2))
+    model.add(Dropout(0.3))
+    model.add(Dense(n_classes, activation = 'softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
+    return model
+
+
+
+def ann_rnn(input_shape, n_classes):
+    """
+    for working with extracted features
+    """
+    model = Sequential(name='ann_rnn')
+    model.add(TimeDistributed(Dense (80, activation='elu', kernel_initializer='he_normal'), input_shape=input_shape))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.35))
+    model.add(TimeDistributed(Dense (80, activation='elu', kernel_initializer='he_normal')))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.35))
+    model.add(LSTM(50))
+    model.add(Dense(n_classes, activation = 'softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
+    return model
+
+def pure_rnn(input_shape, n_classes):
+    """
+    just replace ANN by RNNs
+    """
+    model = Sequential(name='pure_rnn')
+    model.add(LSTM(80, return_sequences=True, input_shape=input_shape))
+    model.add(LSTM(80, return_sequences=False))
+    model.add(Dense(n_classes, activation = 'softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
+    return model
+
+def pure_rnn_3(input_shape, n_classes):
+    """
+    just replace ANN by 3xRNNs
+    """
+    model = Sequential(name='pure_rnn')
+    model.add(LSTM(80, return_sequences=True, input_shape=input_shape))
+    model.add(LSTM(80, return_sequences=True))
+    model.add(LSTM(50, return_sequences=False))
     model.add(Dense(n_classes, activation = 'softmax'))
     model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
     return model
@@ -182,7 +229,7 @@ def rcnn(input_shape, n_classes):
     model.compile(loss='categorical_crossentropy', optimizer=Adadelta())
     return model
 
-def rnn(input_shape, n_classes):
+def rnn_old(input_shape, n_classes):
     """
     Input size should be [batch, 1d, 2d, ch] = (None, 1, 15000, 1)
     """

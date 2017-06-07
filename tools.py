@@ -45,19 +45,39 @@ def convert_Y_to_seq_batches(Y, batch_size):
     idx = idx.reshape([batch_size,-1]).flatten('F')
     return Y[idx]
 
+def test(data, *args):
+    if args is not (): assert np.all([len(data)==len(x) for x in args])
 
-def sequences(data, targets, seqlen)
+
+def to_sequences(data, *args, seqlen = 0, tolist = True, wrap = False):
     '''
-    Creates time-sequences with overlap (sliding window)
+    Creates time-sequences
+    :returns list: list of list of numpy arrays. this way no memory redundance is created
     '''
     if seqlen==0: return data
-    assert signals.shape[0] > fsteps, 'Future steps must be smaller than number of datapoints'
-    if signals.ndim == 2: signals = np.expand_dims(signals,2) 
-    nsamp = signals.shape[1]
-    new_signals = np.zeros((signals.shape[0],signals.shape[1]*(fsteps+1), signals.shape[2]),dtype=np.float32)
-    for i in np.arange(fsteps+1):
-        new_signals[:,i*nsamp:(i+1)*nsamp,:] = np.roll(signals[:,:,:],-i,axis=0)
-    return new_signals.squeeze() if new_signals.shape[2]==1 else new_signals
+    if args is not (): assert np.all([len(data)==len(x) for x in args]), 'Data and Targets must have same length'
+    assert data.shape[0] > seqlen, 'Future steps must be smaller than number of datapoints'
+    
+    data = [x for x in data]
+    new_data = []
+    for i in range((len(data))if wrap else (len(data)-seqlen+1) ):
+        seq = []
+        for s in range(seqlen):
+            seq.append(data[(i+s)%len(data)])
+        new_data.append(seq)
+    if not tolist: 
+        new_data = np.array(new_data, dtype=np.float32)  
+        
+    if args is not ():
+        new_data = [new_data]
+        for array in args:
+            new_array = np.roll(array, -seqlen+1)
+            if not wrap: new_array = new_array[:-seqlen+1]
+            assert len(new_array)==len(new_data[0]), 'something went wrong {}!={}'.format(len(new_array),len(new_data[0])) 
+            new_data.append(new_array)
+    
+    return new_data
+
 
 #def normalize(input_directory, output_directory):
 #    """

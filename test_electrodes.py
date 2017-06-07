@@ -63,7 +63,7 @@ def load_data(tsinalis=False):
         data = np.expand_dims(data,1)
     return data, target, groups
     
-#data,target,groups = load_data()
+data,target,groups = load_data()
 #%%
 
 print('Extracting features')

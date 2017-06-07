@@ -180,35 +180,46 @@ class Checkpoint(keras.callbacks.Callback):
     
 
 
-def generator(X, Y, batch_size, random=False, truncate=False, val=False):
+def generator(X, Y, batch_size, sequential = False, truncate=False, val=False, random=True):
     """
         Data generator util for Keras. 
         Generates data in such a way that it can be used with a stateful RNN
 
     :param X: data (either train or val) with shape 
     :param Y: labels (either train or val) with shape 
-    :param num_of_batches: number of batches (a keras thing)
-    :param random: randomize pos or neg within a batch
-
+    :param num_of_batches: number of batches (np.ceil(len(Y)/batch_size) for non truncated mode 
+    :param sequential: for stateful training
+    :param truncate: Only yield full batches
+    :param val: I don't remember what this does.
+    :param random: randomize pos or neg within a batch, ignored in sequential mode
+    
     :return: patches (batch_size, 15, 15, 15) and labels (batch_size,)
     """
     assert len(X)==len(Y), 'X and Y not the same length'
     step = 0
-    num_of_batches = len(X)//batch_size
+    num_of_batches = len(X)//batch_size if truncate else np.ceil(len(X)/batch_size)
     while True:
-        assert len(X)//batch_size==num_of_batches, 'generator error, batch_size and # batches do not match'
-        if truncate and step==num_of_batches:
-            step = 0
-        x_batch = [X[(seq * num_of_batches + step) % len(X)] for seq in range(batch_size)]
-        y_batch = [Y[(seq * num_of_batches + step) % len(X)] for seq in range(batch_size)]
-        y_weights = np.ones(len(y_batch))
-        y_weights[np.argmax(y_batch,1)==1] = 3
-        step+=1
-        if random:
-            shuffle(x_batch, y_batch)
-        # yield np.expand_dims(inputs, -1), keras.utils.to_categorical(targets, num_classes=2)
-        yield (np.array(x_batch), np.array(y_batch), y_weights) if not val else np.array(x_batch)
-        
+        if sequential:
+            if step==num_of_batches:
+                step = 0
+            x_batch = [X[(seq * num_of_batches + step) % len(X)] for seq in range(batch_size)]
+            y_batch = [Y[(seq * num_of_batches + step) % len(X)] for seq in range(batch_size)]
+#            y_weights = np.ones(len(y_batch))
+    #        y_weights[np.argmax(y_batch,1)==1] = 3
+            step+=1
+            # yield np.expand_dims(inputs, -1), keras.utils.to_categorical(targets, num_classes=2)
+            yield (np.array(x_batch), np.array(y_batch)) if not val else np.array(x_batch)
+        else:   
+            if step == num_of_batches:
+                step = 0
+            x_batch = X[step*batch_size:(step+1)*batch_size]
+            y_batch = Y[step*batch_size:(step+1)*batch_size]
+            step+=1
+            if random:
+                shuffle(x_batch, y_batch)
+            yield (np.array(x_batch), np.array(y_batch)) if not val else np.array(x_batch)
+            
+    
 def plot_history(history):
         plt.subplot(1,2,1)
         plt.plot(history['loss'],'r')

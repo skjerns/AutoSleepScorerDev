@@ -13,6 +13,7 @@ import keras
 import tools
 import scipy
 import models
+import pickle
 from keras_utils import cv
 if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
 import matplotlib; matplotlib.rcParams['figure.figsize'] = (10, 3)
@@ -73,34 +74,46 @@ feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
 feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,1])
 feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,2])
 feats = np.hstack([feats_eeg, feats_eog, feats_emg])
+#feats1, target1, groups1 = tools.to_sequences(feats, target, groups, seqlen=1, tolist=False)
+#feats2, target2, groups2 = tools.to_sequences(feats, target, groups, seqlen=2, tolist=False)
+feats5, target5, groups5 = tools.to_sequences(feats, target, groups, seqlen=5, tolist=False)
+#feats10, target10, groups10 = tools.to_sequences(feats, target, groups, seqlen=10, tolist=False)
 
 # 
 if 'data' in vars():
     if np.sum(np.isnan(data)) or np.sum(np.isnan(data)):print('Warning! NaNs detected')
 #%%
-print("starting")
 
 n_classes = target.shape[1]
-batch_size = 768    
+batch_size = 2880    *2
 val_batch_size = 768
 epochs = 500
 comment = 'rnn_test'
 print(comment)
 
-print("starting")
+print("starting at")
 
-stop
+r = dict()
+r['pure_rnn_5'] = cv(feats5, target5, groups5, models.pure_rnn, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+r['pure_rnnx3_5'] = cv(feats5, target5, groups5, models.pure_rnn_3, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+r['pure_rrn_do_5'] = cv(feats5, target5, groups5, models.pure_rnn_do, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+r['ann_rrn_5'] = cv(feats5, target5, groups5, models.ann_rnn, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+with open('results_recurrent_architectures.pkl', 'wb') as f:
+            pickle.dump(r, f)
 
 
-n_classes = target.shape[1]
-batch_size = 64    
-val_batch_size = 64
-epochs = 4
-comment = 'Keras test'
-print(comment)
-r = []
-input_shape = (data.shape[1:]) #train_data.shape
-#for modfun in [models.cnn3adam,models.cnn3morefilter]:
-for modfun in []:
-    r.append(cv(data, target, groups, modfun))
-     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
