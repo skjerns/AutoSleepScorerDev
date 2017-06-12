@@ -112,11 +112,22 @@ with open('results_electrodes_morefilter.pkl', 'wb') as f:
             pickle.dump(result, f)
             
 
+#
+#
+#
+#
+#%%
 
+i=67023
+seaborn.plt.figure()
+seaborn.plt.subplot(3,1,1)
+seaborn.plt.plot(data[i,:,0])
+plt.title('EEG')
 
+seaborn.plt.subplot(3,1,2)
+seaborn.plt.plot(data[i,:,1])
+plt.title('EOG')
 
-
-
-
-
-
+seaborn.plt.subplot(3,1,3)
+seaborn.plt.plot(data[i,:,2])
+plt.title('EMG')

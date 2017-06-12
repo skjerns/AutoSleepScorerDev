@@ -54,7 +54,8 @@ def to_sequences(data, *args, seqlen = 0, tolist = True, wrap = False):
     Creates time-sequences
     :returns list: list of list of numpy arrays. this way no memory redundance is created
     '''
-    if seqlen==0: return data
+    if seqlen==0: return data if args is  () else [data]+list(args)
+    if seqlen==1: return  np.expand_dims(data,1) if args is () else [np.expand_dims(data,1)]+list(args)
     if args is not (): assert np.all([len(data)==len(x) for x in args]), 'Data and Targets must have same length'
     assert data.shape[0] > seqlen, 'Future steps must be smaller than number of datapoints'
     

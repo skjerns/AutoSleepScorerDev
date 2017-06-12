@@ -4,15 +4,18 @@ Created on Sun May 28 14:09:09 2017
 
 @author: Simon
 """
+import os
 import keras
+import keras.backend.tensorflow_backend as K
+from keras_utils import switch_gpu
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, BatchNormalization, Activation
 from keras.layers import LSTM, Reshape,Permute, TimeDistributed
 from keras.layers import MaxPooling2D, Conv2D, Conv1D, MaxPooling1D
 from keras.optimizers import Adadelta, RMSprop, Adam
-#input_shape=[3000,3]
-#n_classes=5
-
+input_shape=[3000,1]
+n_classes=5
+#m=cnn3adam(input_shape,n_classes)
 #%%
 
 
@@ -22,25 +25,32 @@ def cnn3adam(input_shape, n_classes):
     """
     model = Sequential(name='cnn3adam')
     model.add(Conv1D (kernel_size = (50), filters = 64, strides=5, input_shape=input_shape, kernel_initializer='he_normal', activation='elu')) 
+    print(model.input_shape)
+    print(model.output_shape)
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
     
     model.add(Conv1D (kernel_size = (5), filters = 128, strides=1, kernel_initializer='he_normal', activation='elu')) 
+    print(model.output_shape)
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
     model.add(MaxPooling1D())
-    
+    print(model.output_shape)
     model.add(Conv1D (kernel_size = (5), filters = 128, strides=2, kernel_initializer='he_normal', activation='elu')) 
+    print(model.output_shape)
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
     model.add(MaxPooling1D())
-
+    print(model.output_shape)
     model.add(Flatten())
     model.add(Dense (500, activation='elu', kernel_initializer='he_normal'))
     model.add(BatchNormalization())
+    print(model.output_shape)
     model.add(Dropout(0.5))
     model.add(Dense (500, activation='elu', kernel_initializer='he_normal'))
+    print(model.output_shape)
     model.add(BatchNormalization())
+    print(model.output_shape)
     model.add(Dropout(0.5))
     model.add(Dense(n_classes, activation = 'softmax'))
     model.compile(loss='categorical_crossentropy', optimizer=Adam())
@@ -79,7 +89,6 @@ def cnn3adam_filter(input_shape, n_classes):
 
 
 
-
 def ann(input_shape, n_classes, layers=2, neurons=80, dropout=0.35 ):
     """
     for working with extracted features
@@ -93,21 +102,38 @@ def ann(input_shape, n_classes, layers=2, neurons=80, dropout=0.35 ):
     model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
     return model
 
-#%% everyhing recurrent
+
+def largeann(input_shape, n_classes, layers=3, neurons=2000, dropout=0.35 ):
+    """
+    for working with extracted features
+    """
+#    gpu = switch_gpu()
+#    with K.tf.device('/gpu:{}'.format(gpu)):
+#        K.set_session(K.tf.Session(config=K.tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)))
+    model = Sequential(name='ann')
+#    model.gpu = gpu
+    for l in range(layers):
+        model.add(Dense (neurons, input_shape=input_shape, activation='elu', kernel_initializer='he_normal'))
+        model.add(BatchNormalization())
+        model.add(Dropout(dropout))
+    model.add(Dense(n_classes, activation = 'softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
+    return model
+
+#%% everyhing recurrent for ANN
+
+
 def pure_rnn_do(input_shape, n_classes):
     """
     just replace ANN by RNNs
     """
     model = Sequential(name='pure_rnn_do')
-    model.add(LSTM(80, return_sequences=True, input_shape=input_shape, recurrent_dropout=0.2))
-    model.add(Dropout(0.3))
-    model.add(LSTM(80, return_sequences=False, recurrent_dropout=0.2))
+    model.add(LSTM(80,return_sequences=True, input_shape=input_shape, recurrent_dropout=0.3))
+    model.add(LSTM(80, return_sequences=False, recurrent_dropout=0.3))
     model.add(Dropout(0.3))
     model.add(Dense(n_classes, activation = 'softmax'))
     model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
     return model
-
-
 
 def ann_rnn(input_shape, n_classes):
     """
@@ -147,6 +173,48 @@ def pure_rnn_3(input_shape, n_classes):
     model.add(Dense(n_classes, activation = 'softmax'))
     model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
     return model
+
+#%% everything recurrent for CNN
+
+def cnn3adam_filter_topped(input_shape, n_classes):
+    """
+    Input size should be [batch, 1d, 2d, ch] = (None, 3000, 3)
+    """
+    model = Sequential(name='cnn3adam_filter')
+    model.add(TimeDistributed(Conv1D (kernel_size = (50), filters = 128, strides=5, input_shape=input_shape, kernel_initializer='he_normal', activation='elu')) )
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(Dropout(0.2)))
+    
+    model.add(TimeDistributed(Conv1D (kernel_size = (5), filters = 256, strides=1, kernel_initializer='he_normal', activation='elu')) )
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(Dropout(0.2)))
+    model.add(TimeDistributed(MaxPooling1D()))
+    
+    model.add(TimeDistributed(Conv1D (kernel_size = (5), filters = 300, strides=2, kernel_initializer='he_normal', activation='elu')) )
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(Dropout(0.2)))
+    model.add(TimeDistributed(MaxPooling1D()))
+
+    model.add(TimeDistributed(Flatten()))
+    model.add(TimeDistributed(Dense (1500, activation='elu', kernel_initializer='he_normal')))
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(Dropout(0.5)))
+    model.add(TimeDistributed(Dense (1500, activation='elu', kernel_initializer='he_normal')))
+    model.add(TimeDistributed(BatchNormalization()))
+    model.add(TimeDistributed(Dropout(0.5)))
+    model.add(LSTM(250,recurrent_dropout=0.3, return_sequences=False))
+    model.add(Dense(n_classes, activation = 'softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam())
+    return model
+
+
+
+
+
+
+
+
+
 
 
 #%% training routine
@@ -239,6 +307,13 @@ def rnn_old(input_shape, n_classes):
     print(model.output_shape)
     model.compile(loss='categorical_crossentropy', optimizer=Adadelta(), metrics=[keras.metrics.categorical_accuracy])
     return model
+
+
+
+
+
+
+
 
 #%% old models
 

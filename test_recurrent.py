@@ -64,7 +64,7 @@ def load_data(tsinalis=False):
 #        data = np.swapaxes(data,1,2)
     return data.astype(np.float32), target, groups
     
-#data,target,groups = load_data()
+data,target,groups = load_data()
 #%%
 
 print('Extracting features')
@@ -74,46 +74,43 @@ feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
 feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,1])
 feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,2])
 feats = np.hstack([feats_eeg, feats_eog, feats_emg])
-#feats1, target1, groups1 = tools.to_sequences(feats, target, groups, seqlen=1, tolist=False)
-#feats2, target2, groups2 = tools.to_sequences(feats, target, groups, seqlen=2, tolist=False)
-feats5, target5, groups5 = tools.to_sequences(feats, target, groups, seqlen=5, tolist=False)
-#feats10, target10, groups10 = tools.to_sequences(feats, target, groups, seqlen=10, tolist=False)
-
 # 
 if 'data' in vars():
     if np.sum(np.isnan(data)) or np.sum(np.isnan(data)):print('Warning! NaNs detected')
 #%%
 
-n_classes = target.shape[1]
-batch_size = 2880    *2
-val_batch_size = 768
-epochs = 500
 comment = 'rnn_test'
 print(comment)
 
 print("starting at")
+#%%   model comparison
+#r = dict()
+#r['pure_rnn_5'] = cv(feats5, target5, groups5, models.pure_rnn, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+#r['pure_rnnx3_5'] = cv(feats5, target5, groups5, models.pure_rnn_3, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+#r['pure_rrn_do_5'] = cv(feats5, target5, groups5, models.pure_rnn_do, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+#r['ann_rrn_5'] = cv(feats5, target5, groups5, models.ann_rnn, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+#with open('results_recurrent_architectures.pkl', 'wb') as f:
+#            pickle.dump(r, f)
 
+#%%   seqlen
+#r = dict()
+##r['pure_rrn_do_1'] = cv(feats1, target1, groups1, models.pure_rnn_do, name='1',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+#for i in [1,2,3,4,5,6,7,8,9,10,15]:
+#    feats_seq, target_seq, group_seq = tools.to_sequences(feats, target, groups, seqlen = i, tolist=False)
+#    r['pure_rrn_do_' + str(i)] = cv(feats_seq, target_seq, group_seq, models.pure_rnn_do_stateful,
+#                                    name=str(i),epochs=epochs, folds=10, batch_size=batch_size, 
+#                                    counter=counter, plot=True, stop_after=35)
+#
+#with open('results_recurrent_seqlen1-15.pkl', 'wb') as f:
+#            pickle.dump(r, f)
+
+#%%
+batch_size = 128    
+epochs = 250
 r = dict()
-r['pure_rnn_5'] = cv(feats5, target5, groups5, models.pure_rnn, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
-r['pure_rnnx3_5'] = cv(feats5, target5, groups5, models.pure_rnn_3, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
-r['pure_rrn_do_5'] = cv(feats5, target5, groups5, models.pure_rnn_do, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
-r['ann_rrn_5'] = cv(feats5, target5, groups5, models.ann_rnn, name='5',epochs=epochs, folds=10,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
-with open('results_recurrent_architectures.pkl', 'wb') as f:
+data_seq, target_seq, group_seq = tools.to_sequences(data,target,groups, seqlen=5, tolist=True)
+r['cnn_adam_filter_topped'] = cv(data_seq, target_seq, group_seq, models.cnn_adam_filter_topped, name='cnn rnn topped',epochs=epochs, folds=5,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+
+
+with open('results_recurrent_seqlen1-15.pkl', 'wb') as f:
             pickle.dump(r, f)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
