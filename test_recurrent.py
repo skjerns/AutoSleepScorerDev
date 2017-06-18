@@ -13,8 +13,9 @@ import keras
 import tools
 import scipy
 import models
+import imp
 import pickle
-from keras_utils import cv
+import keras_utils
 if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
 import matplotlib; matplotlib.rcParams['figure.figsize'] = (10, 3)
 np.random.seed(42)
@@ -49,8 +50,8 @@ def load_data(tsinalis=False):
 
     data, target, groups = sleep.get_all_data(groups=True)
 
-    data    = scipy.stats.mstats.zscore(data , axis = None)
-
+    data = scipy.stats.mstats.zscore(data , axis = None)
+    data = data.astype(np.float32)
     target[target==5] = 4
 
     target[target==8] = 0
@@ -62,7 +63,7 @@ def load_data(tsinalis=False):
         data = np.expand_dims(data,1)
 #    else:
 #        data = np.swapaxes(data,1,2)
-    return data.astype(np.float32), target, groups
+    return data, target, groups
     
 data,target,groups = load_data()
 #%%
@@ -105,12 +106,29 @@ print("starting at")
 #            pickle.dump(r, f)
 
 #%%
-batch_size = 128    
+imp.reload(models)
+imp.reload(keras_utils)
+
+batch_size = 360
 epochs = 250
+#data_seq, target_seq, group_seq = tools.to_sequences(data,target,groups, seqlen=0, tolist=True)
+gc.collect()
+
+
 r = dict()
-data_seq, target_seq, group_seq = tools.to_sequences(data,target,groups, seqlen=5, tolist=True)
-r['cnn_adam_filter_topped'] = cv(data_seq, target_seq, group_seq, models.cnn_adam_filter_topped, name='cnn rnn topped',epochs=epochs, folds=5,batch_size=batch_size, counter=counter, plot=True, stop_after=35)
+#r['rnn_extracted_-4'] = keras_utils.cv(data, target, groups, models.cnn3adam_filter, name='rnn_extracted_-4',
+#                         epochs=epochs, folds=5,batch_size=batch_size, counter=counter, plot=True, stop_after=25,
+#                         rnn=[models.pure_rnn, -4, 6, 1024])
+#r['rnn_extracted_-1'] = keras_utils.cv(data, target, groups, models.cnn3adam_filter, name='rnn_extracted_-1',
+#                         epochs=epochs, folds=5,batch_size=batch_size, counter=counter, plot=True, stop_after=25,
+#                         rnn=[models.pure_rnn, -1, 6, 1024])
+r['rnn_extracted_-2'] = keras_utils.cv(data, target, groups, models.cnn3adam_filter, name='rnn_extracted_-2',
+                         epochs=epochs, folds=5,batch_size=batch_size, counter=counter, plot=True, stop_after=25,
+                         rnn=[models.pure_rnn, -2, 6, 1024])
+r['rnn_extracted_-3'] = keras_utils.cv(data, target, groups, models.cnn3adam_filter, name='rnn_extracted_-3',
+                         epochs=epochs, folds=5,batch_size=batch_size, counter=counter, plot=True, stop_after=25,
+                         rnn=[models.pure_rnn, -3, 6, 1024])
 
 
-with open('results_recurrent_seqlen1-15.pkl', 'wb') as f:
-            pickle.dump(r, f)
+#with open('results_rnn_extracted.pkl', 'wb') as f:
+#            pickle.dump(r, f)

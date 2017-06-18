@@ -87,25 +87,25 @@ comment = 'testing_electrodes'
 print(comment)
 
 
-##%% 
-epochs = 2000
-batch_size = 4048 * 2
-val_batch_size = 30000
-#
-result['feat_eeg'] = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=100, plot=True)
-result['feat_eog'] = cv(np.hstack([feats_eeg,feats_eog]), target, groups, models.ann, name = 'eeg+eog', stop_after=100)  
-result['feat_emg'] = cv(np.hstack([feats_eeg,feats_emg]), target, groups, models.ann, name = 'eeg+emg', stop_after=100) 
-result['feat_all'] = cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann, name = 'all', stop_after=100) 
+###%% 
+#epochs = 2000
+#batch_size = 4048 * 2
+#val_batch_size = 30000
+##
+#result['feat_eeg'] = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=100, plot=True)
+#result['feat_eog'] = cv(np.hstack([feats_eeg,feats_eog]), target, groups, models.ann, name = 'eeg+eog', stop_after=100)  
+#result['feat_emg'] = cv(np.hstack([feats_eeg,feats_emg]), target, groups, models.ann, name = 'eeg+emg', stop_after=100) 
+#result['feat_all'] = cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann, name = 'all', stop_after=100) 
 
 with open('results_electrodes.pkl', 'wb') as f:
             pickle.dump(result, f)
 ##%% 
-batch_size = 1440    
-val_batch_size = 1440
+batch_size = 256
+val_batch_size = 512
 epochs = 250
 
-result['cnn_eeg'] = cv(data[:,:,0:1], target, groups, models.cnn3adam, name = 'eeg', stop_after=25)
-result['cnn_eog'] = cv(data[:,:,0:2], target, groups, models.cnn3adam, name = 'eeg+eog', stop_after=25)  
+#result['cnn_eeg'] = cv(data[:,:,0:1], target, groups, models.cnn3adam, name = 'eeg', stop_after=25)
+#result['cnn_eog'] = cv(data[:,:,0:2], target, groups, models.cnn3adam, name = 'eeg+eog', stop_after=25)  
 result['cnn_emg'] = cv(data[:,:,[0,2]], target, groups, models.cnn3adam, name = 'eeg+emg', stop_after=25) 
 result['cnn_all_morefilter'] = cv(data[:,:,:], target, groups, models.cnn3adam_filter, name = 'all_morefilter', stop_after=25) 
 with open('results_electrodes_morefilter.pkl', 'wb') as f:

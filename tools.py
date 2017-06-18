@@ -45,9 +45,6 @@ def convert_Y_to_seq_batches(Y, batch_size):
     idx = idx.reshape([batch_size,-1]).flatten('F')
     return Y[idx]
 
-def test(data, *args):
-    if args is not (): assert np.all([len(data)==len(x) for x in args])
-
 
 def to_sequences(data, *args, seqlen = 0, tolist = True, wrap = False):
     '''
