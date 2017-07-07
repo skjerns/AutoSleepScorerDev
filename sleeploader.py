@@ -274,7 +274,7 @@ class SleepDataset(Singleton):
         if not header.info['sfreq'] == 100:
             if resampling == True:
                 print ('Resampling data from {}hz to 100hz'.format(int(self.sfreq)))
-                eeg = resample(eeg, len(eeg)/int(np.round(self.sfreq))*100)
+                eeg = resample(eeg, int(len(eeg)/int(np.round(self.sfreq))*100))
                 self.sfreq = 100.0 
             else:
                 print ('Not resampling')
@@ -285,7 +285,7 @@ class SleepDataset(Singleton):
         self.samples_per_epoch = int(epoch_len * self.sfreq)
         
 
-        eeg = eeg[:(len(eeg)/self.samples_per_epoch)*self.samples_per_epoch]     # remove left over to ensure len(data)%3000==0
+        eeg = eeg[:(len(eeg)//self.samples_per_epoch)*self.samples_per_epoch]     # remove left over to ensure len(data)%3000==0
         return eeg, hypno
         
         

@@ -87,47 +87,48 @@ comment = 'testing_electrodes'
 print(comment)
 
 
-###%% 
+##%% 
 #epochs = 2000
 #batch_size = 4048 * 2
 #val_batch_size = 30000
-##
-#result['feat_eeg'] = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=100, plot=True)
+#
+#result['feat_eeg'] = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=0, plot=True)
 #result['feat_eog'] = cv(np.hstack([feats_eeg,feats_eog]), target, groups, models.ann, name = 'eeg+eog', stop_after=100)  
 #result['feat_emg'] = cv(np.hstack([feats_eeg,feats_emg]), target, groups, models.ann, name = 'eeg+emg', stop_after=100) 
 #result['feat_all'] = cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann, name = 'all', stop_after=100) 
-
-with open('results_electrodes.pkl', 'wb') as f:
-            pickle.dump(result, f)
-##%% 
-batch_size = 256
-val_batch_size = 512
-epochs = 250
-
-#result['cnn_eeg'] = cv(data[:,:,0:1], target, groups, models.cnn3adam, name = 'eeg', stop_after=25)
-#result['cnn_eog'] = cv(data[:,:,0:2], target, groups, models.cnn3adam, name = 'eeg+eog', stop_after=25)  
-result['cnn_emg'] = cv(data[:,:,[0,2]], target, groups, models.cnn3adam, name = 'eeg+emg', stop_after=25) 
-result['cnn_all_morefilter'] = cv(data[:,:,:], target, groups, models.cnn3adam_filter, name = 'all_morefilter', stop_after=25) 
-with open('results_electrodes_morefilter.pkl', 'wb') as f:
-            pickle.dump(result, f)
+#
+#with open('results_electrodes.pkl', 'wb') as f:
+#            pickle.dump(result, f)
+###%% 
+#val_batch_size = 1440
+#epochs = 250
+#
+#result['cnn_eeg_morefilter'] = cv(data[:,:,0:1], target, groups, models.cnn3adam_filter, name = 'eeg', stop_after=25, counter=counter,batch_size=batch_size)
+#result['cnn_eog_morefilter'] = cv(data[:,:,0:2], target, groups, models.cnn3adam_filter, name = 'eeg+eog', stop_after=25, counter=counter,batch_size=batch_size)  
+#result['cnn_emg_morefilter'] = cv(data[:,:,[0,2]], target, groups, models.cnn3adam_filter, name = 'eeg+emg', stop_after=25, counter=counter,batch_size=batch_size) 
+#result['cnn_all_morefilter'] = cv(data[:,:,:], target, groups, models.cnn3adam_filter, name = 'all_morefilter', stop_after=25, counter=counter,batch_size=batch_size) 
+#with open('results_electrodes_morefilter_allcnn.pkl', 'wb') as f:
+#            pickle.dump(result, f)
             
 
-#
-#
-#
-#
-#%%
 
-i=67023
-seaborn.plt.figure()
-seaborn.plt.subplot(3,1,1)
-seaborn.plt.plot(data[i,:,0])
-plt.title('EEG')
+#%% weighting test
 
-seaborn.plt.subplot(3,1,2)
-seaborn.plt.plot(data[i,:,1])
-plt.title('EOG')
+r = dict()
+batch_size = 256
+#r['cnn3_3weighted'] = cv(data, target, groups, models.cnn3adam_filter,
+#                                name='weighted',epochs=300, folds=5, batch_size=batch_size, 
+#                                counter=counter, plot=True, stop_after=15, weighted=True)
+#pickle.dump(r, open('results_weighted.pkl', 'wb'))
+#r['cnn3_2logweighted'] = cv(data, target, groups, models.cnn3adam_filter,
+#                                name='weighted',epochs=300, folds=5, batch_size=batch_size, 
+#                                counter=counter, plot=True, stop_after=15, weighted=True, log=True)
+#pickle.dump(r, open('results_weighted.pkl', 'wb'))
+r = pickle.load(open('results_weighted.pkl', 'rb'))
+r['cnn3_1not_weighted'] = cv(data, target, groups, models.cnn3adam_filter,
+                                name='not weighted',epochs=300, folds=5, batch_size=batch_size, 
+                                counter=counter, plot=True, stop_after=15, weighted=False, log=False)
+pickle.dump(r, open('results_weighted.pkl', 'wb'))
 
-seaborn.plt.subplot(3,1,3)
-seaborn.plt.plot(data[i,:,2])
-plt.title('EMG')
+
+

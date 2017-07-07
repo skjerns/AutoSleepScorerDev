@@ -12,6 +12,7 @@ import numpy as np
 import os.path
 import pandas as pd
 import seaborn as sns
+import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 #import pyfftw
 from scipy import fft
@@ -26,6 +27,50 @@ import re
 use_sfreq=100.0
 
 
+
+def plot_signal(data1,data2):
+    class Visualizer():
+        def __init__(self, data1,data2):
+            self.data1 = data1
+            self.data2 = data2
+            self.pos = 0
+            self.scale = 0
+
+             
+        def update(self):
+            try:
+#                self.ax.subplot(121)
+                self.ax.cla()
+                self.ax.plot(self.data1[self.pos,:,0])
+                self.ax.plot(self.data2[self.pos,:,0])
+                self.ax.set_ylim([-500,500])
+                plt.title(self.pos)
+                self.fig.canvas.draw()
+                
+            except Exception as e: print(e)
+    def key_event(e):
+        v = _vis
+        try:
+            if e.key == "right":
+                v.pos +=1
+            elif e.key == "left":
+                v.pos -= 1
+            elif e.key == "up":
+                v.scale += 1
+            elif e.key == "down":
+                v.scale -= 1
+            else:
+                print(e.key)
+
+            v.update()
+            
+        except Exception as e:print(e)
+    global _vis
+    _vis = Visualizer(data1,data2)
+    _vis.fig = plt.figure()
+    _vis.fig.canvas.mpl_connect('key_press_event', key_event)
+    _vis.ax = _vis.fig.add_subplot(111)
+    _vis.update()
 
 def confmat_to_numpy(confmat_str):
     rows = confmat_str.split('] [')
@@ -44,6 +89,9 @@ def convert_Y_to_seq_batches(Y, batch_size):
     idx = np.arange(len(Y))
     idx = idx.reshape([batch_size,-1]).flatten('F')
     return Y[idx]
+
+def test(data, *args):
+    if args is not (): assert np.all([len(data)==len(x) for x in args])
 
 
 def to_sequences(data, *args, seqlen = 0, tolist = True, wrap = False):
@@ -323,17 +371,56 @@ def append_json(json_filename, dic):
 
 
 def plot_confusion_matrix(fname, conf_mat, target_names,
-                          title='Confusion matrix', cmap='Blues', perc=True):
+                          title='', cmap='Blues', perc=True,figsize=(6,5)):
     """Plot Confusion Matrix."""
+    c_names = []
+    r_names = []
+    for i, label in enumerate(target_names):
+        c_names.append(label + '\n(' + str(int(np.sum(conf_mat[:,i]))) + ')')
+        align = len(str(int(np.sum(conf_mat[i,:])))) + 3 - len(label)
+        r_names.append('{:{align}}'.format(label, align=align) + '\n(' + str(int(np.sum(conf_mat[i,:]))) + ')')
+        
     cm = conf_mat
-    cm = 100 * cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-    df = pd.DataFrame(data=cm, columns=target_names, index=target_names)
-    g  = sns.heatmap(df, annot=True if perc else conf_mat , fmt=".1f" if perc else ".0f",
-                     linewidths=.5, vmin=0, vmax=100, cmap=cmap)    
+    cm = 100* cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+    df = pd.DataFrame(data=np.sqrt(cm), columns=c_names, index=r_names)
+    plt.figure(figsize=figsize)
+    g  = sns.heatmap(df, annot = cm if perc else conf_mat , fmt=".1f" if perc else ".0f",
+                     linewidths=.5, vmin=0, vmax=np.sqrt(100), cmap=cmap)    
     g.set_title(title)
-    g.set_ylabel('True label')
-    g.set_xlabel('Predicted label')
-    g.figure.savefig('.//results//' + fname)
+    cbar = g.collections[0].colorbar
+    cbar.set_ticks(np.sqrt(np.arange(0,100,20)))
+    cbar.set_ticklabels(np.arange(0,100,20))
+    g.set_ylabel('True sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
+    g.set_xlabel('Predicted sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
+    plt.tight_layout()
+    g.figure.savefig(os.path.join('plots', fname))
+
+
+def plot_difference_matrix(fname, confmat1, confmat2, target_names,
+                          title='', cmap='Blues', perc=True,figsize=(5,4)):
+    """Plot Confusion Matrix."""
+
+    
+    cm1 = confmat1
+    cm2 = confmat2
+    cm1 = 100 * cm1.astype('float') / cm1.sum(axis=1)[:, np.newaxis]
+    cm2 = 100 * cm2.astype('float') / cm2.sum(axis=1)[:, np.newaxis]
+    cm = cm2 - cm1
+    cm_eye = np.zeros_like(cm)
+    cm_eye[np.eye(len(cm_eye), dtype=bool)] = cm.diagonal()
+    df = pd.DataFrame(data=cm_eye, columns=target_names, index=target_names)
+    plt.figure(figsize=figsize)
+    g  = sns.heatmap(df, annot=cm, fmt=".1f" ,
+                     linewidths=.5, vmin=-10, vmax=10, 
+                     cmap='coolwarm_r')#sns.diverging_palette(20, 220, as_cmap=True))    
+    g.set_title(title)
+    g.set_ylabel('True sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
+    g.set_xlabel('Predicted sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
+    plt.tight_layout()
+
+    g.figure.savefig(os.path.join('plots', fname))
+
 
 
 def memory():
