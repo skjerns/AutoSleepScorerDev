@@ -232,6 +232,81 @@ class Checkpoint(keras.callbacks.Callback):
     
 
 #%%
+class generator_balanced(object):
+    """
+        Data generator util for Keras. 
+        Generates data in such a way that it can be used with a stateful RNN
+
+    :param X: data (either train or val) with shape 
+    :param Y: labels (either train or val) with shape 
+    :param num_of_batches: number of batches (np.ceil(len(Y)/batch_size) for non truncated mode 
+    :param sequential: for stateful training
+    :param truncate: Only yield full batches, in sequential mode the batches will be wrapped in case of false
+    :param val: it only returns the data without the target
+    :param random: randomize pos or neg within a batch, ignored in sequential mode 
+    
+    :return: patches (batch_size, 15, 15, 15) and labels (batch_size,)
+    """
+    def __init__(self, X, Y, batch_size):
+        
+        assert len(X) == len(Y), 'X and Y must be the same length {}!={}'.format(len(X),len(Y))
+        self.X = X
+        self.Y = Y
+        self.batch_size = int(batch_size)
+        self.reset()
+        
+    def reset(self):
+        """ Resets the state of the generator"""
+        self.step = 0
+        Y = np.argmax(self.Y,1)
+        labels = np.unique(Y)
+        idx = []
+        p = []
+        smallest = len(Y)
+        for i,label in enumerate(labels):
+            where = np.where(Y==label)[0]
+            if smallest > len(where): 
+                self.slabel = i
+                smallest = len(where)
+            idx.append(where)
+            p.append(np.ones(len(where))/len(where))
+        self.p = p
+        self.idx = idx
+        self.labels = labels
+        self.n_per_class = int(self.batch_size // len(labels))
+        self.n_batches = int(np.ceil((smallest//self.n_per_class)*3))+1
+        
+        
+    
+    def __next__(self):
+        if self.step==self.n_batches:
+            self.reset()
+        x_batch = []
+        y_batch = []
+        for label in self.labels:
+            idx = self.idx[label]
+            if len(idx)< self.n_per_class:
+                x_batch.extend([self.X[i] for i in idx])
+                y_batch.extend([self.Y[i] for i in idx])
+                self.idx[label] = []
+            else:
+                number = self.n_per_class if label!=1 else self.n_per_class//3
+                indexes = np.random.choice(np.arange(idx.size), number, p=self.p, replace = False)
+                choice = idx[indexes]
+                x_batch.extend([self.X[i] for i in choice])
+                y_batch.extend([self.Y[i] for i in choice])
+                self.idx[label] = np.delete (self.idx[label], indexes)
+                self.p[label] = np.delete (self.p[label], indexes)
+                    
+        x_batch = np.array(x_batch, dtype=np.float32)
+        y_batch = np.array(y_batch, dtype=np.int32)
+    
+        self.step+=1
+        return (x_batch, y_batch)  
+        
+
+
+
          
 class generator(object):
     """
@@ -449,8 +524,8 @@ def test_model(data, targets, groups, testdata, modfun, epochs=250, batch_size=5
     """
     return
 #%%
-def cv(data, targets, groups, modfun, epochs=250, folds=5, batch_size=512,
-       val_batch_size=0, stop_after=0, name='', counter=0, plot = True, weighted=False, log=False):
+def cv(data, targets, groups, modfun, epochs=250, folds=5, batch_size=512, val_batch_size=0, 
+       stop_after=0, name='', counter=0, plot = True, balanced=False, weighted=False, log=False):
     """
     Crossvalidation routinge for training with a keras model.
     
@@ -489,7 +564,10 @@ def cv(data, targets, groups, modfun, epochs=250, folds=5, batch_size=512,
         
         model = modfun(input_shape, n_classes)
         modelname = model.name
-        g      = generator(train_data, train_target, batch_size, random=True, class_weights=c_weights)
+        if balanced:
+            g  = generator_balanced(train_data, train_target, batch_size)
+        else:
+            g  = generator(train_data, train_target, batch_size, random=True, class_weights=c_weights)
         g_val  = generator(val_data, val_target, batch_size, val=True)
         g_test = generator(test_data, test_target, batch_size, val=True)
         cb     = Checkpoint(g_val, verbose=1, counter=counter, 

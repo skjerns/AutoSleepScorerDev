@@ -22,8 +22,9 @@ for key in pkl:
     tools.plot_confusion_matrix ('recurrent_'+ key + '.png',np.mean(confmat,0), target,figsize=fsize, perc=True, cmap=cmap, title=key)
 
 pkl = pickle.load(open('.\\results\\results_recurrent_seqlen-rnn6.pkl', 'rb'))
+pkl['feat-LSTM'] = pkl.pop('pure_rnn_do_6')
 confmat = [x[4] for x in pkl[list(pkl.keys())[0]]]
-tools.plot_confusion_matrix ('recurrent_feat6.png',np.mean(confmat,0), target,figsize=fsize, perc=True, cmap=cmap, title='RNN')
+tools.plot_confusion_matrix ('recurrent_feat6.png',np.mean(confmat,0), target,figsize=fsize, perc=True, cmap=cmap, title='Feat-LSTM')
 
 
 pkl = pickle.load(open('.\\results\\results_electrodes.pkl', 'rb'))
@@ -31,7 +32,7 @@ target = ['W', 'S1', 'S2', 'SWS', 'REM']
 for key in pkl:
     confmat = [x[4] for x in pkl[key]]
     plt.close('all')
-    tools.plot_confusion_matrix ('electrodes_'+ key + '.png',np.mean(confmat,0), target,figsize=fsize, perc=True,cmap=cmap)
+    tools.plot_confusion_matrix ('asdelectrodes_'+ key + '.png',np.mean(confmat,0), target,figsize=fsize, perc=True,cmap=cmap)
 
 
 #%% Differenceplot
@@ -50,13 +51,21 @@ ann_emg = np.mean([x[4] for x in pkl['feat_emg']], 0)
 ann_all = np.mean([x[4] for x in pkl['feat_all']], 0)
 
 tools.plot_difference_matrix('cnn-all-vs-eeg.png', cnn_all, cnn_eeg, target,figsize=fsize, perc=True, title='CNN all minus EEG')
-tools.plot_difference_matrix('cnn-all-vs-eog.png', cnn_all, cnn_eog, target,figsize=fsize, perc=True, title='CNN all minus EOG')
-tools.plot_difference_matrix('cnn-all-vs-emg.png', cnn_all, cnn_emg, target,figsize=fsize, perc=True, title='CNN all minus EMG')
+tools.plot_difference_matrix('cnn-all-vs-eog.png', cnn_all, cnn_eog, target,figsize=fsize, perc=True, title='CNN all minus EEG+EOG')
+tools.plot_difference_matrix('cnn-all-vs-emg.png', cnn_all, cnn_emg, target,figsize=fsize, perc=True, title='CNN all minus EEG+EMG')
 
-tools.plot_difference_matrix('ann-all-vs-eeg.png', ann_all, ann_eeg, target,figsize=fsize, perc=True, title='ann all minus EEG')
-tools.plot_difference_matrix('ann-all-vs-eog.png', ann_all, ann_eog, target,figsize=fsize, perc=True, title='ann all minus EOG')
-tools.plot_difference_matrix('ann-all-vs-emg.png', ann_all, ann_emg, target,figsize=fsize, perc=True, title='ann all minus EMG')
+tools.plot_difference_matrix('ann-all-vs-eeg.png', ann_all, ann_eeg, target,figsize=fsize, perc=True, title='feat-ANN all minus EEG')
+tools.plot_difference_matrix('ann-all-vs-eog.png', ann_all, ann_eog, target,figsize=fsize, perc=True, title='feat-ANN all minus EEG+EOG')
+tools.plot_difference_matrix('ann-all-vs-emg.png', ann_all, ann_emg, target,figsize=fsize, perc=True, title='feat-ANN all minus EEG+EMG')
+
+pkl1 = pickle.load(open('.\\results\\results_recurrent_seqlen-rnn6.pkl', 'rb'))
+pkl2 = pickle.load(open('.\\results\\results_rnn_extracted.pkl', 'rb'))
+rec_ann = np.mean([x[4] for x in pkl1['pure_rrn_do_6']], 0)
+rec_cnn = np.mean([x[4] for x in pkl2['rnn_extracted_-3']], 0)
+tools.plot_difference_matrix('rec-ann-vs-cnn.png', rec_ann, rec_cnn, target,figsize=fsize, perc=True, title='feat-LSTM minus CNN+LSTM')
+
 plt.close('all')
+
 #tools.plot_difference_matrix('cnn-eeg-vs-eog.png', cnn_eeg, cnn_eog, target,figsize=fsize, perc=True, title='CNN EOG minus EEG')
 #tools.plot_difference_matrix('cnn-eeg-vs-emg.png', cnn_eeg, cnn_emg, target,figsize=fsize, perc=True, title='CNN EMG minus EEG')
 #tools.plot_difference_matrix('cnn-eeg-vs-all.png', cnn_eeg, cnn_all, target,figsize=fsize, perc=True, title='CNN all minus EEG')

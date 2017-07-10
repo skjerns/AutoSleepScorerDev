@@ -105,7 +105,35 @@ def cnn3adam_filter(input_shape, n_classes):
     model.compile(loss='categorical_crossentropy', optimizer=Adam())
     return model
 
-
+def cnn3adam_filter_l2(input_shape, n_classes):
+    """
+    Input size should be [batch, 1d, 2d, ch] = (None, 3000, 3)
+    """
+    model = Sequential(name='cnn3adam_filter')
+    model.add(Conv1D (kernel_size = (50), filters = 128, strides=5, input_shape=input_shape, 
+                      kernel_initializer='he_normal', activation='elu',kernel_regularizer=keras.regularizers.l2(0.005))) 
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+    
+    model.add(Conv1D (kernel_size = (5), filters = 256, strides=1, kernel_initializer='he_normal', activation='elu')) 
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+    model.add(MaxPooling1D())
+    
+    model.add(Conv1D (kernel_size = (5), filters = 300, strides=2, kernel_initializer='he_normal', activation='elu')) 
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+    model.add(MaxPooling1D())
+    model.add(Flatten(name='conv3'))
+    model.add(Dense (1500, activation='elu', kernel_initializer='he_normal'))
+    model.add(BatchNormalization(name='fc1'))
+    model.add(Dropout(0.5))
+    model.add(Dense (1500, activation='elu', kernel_initializer='he_normal'))
+    model.add(BatchNormalization(name='fc2'))
+    model.add(Dropout(0.5))
+    model.add(Dense(n_classes, activation = 'softmax',name='softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam())
+    return model
 
 
 def ann(input_shape, n_classes, layers=2, neurons=80, dropout=0.35 ):
