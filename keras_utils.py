@@ -94,7 +94,7 @@ def get_activations(model, data, layername, batch_size=128, flatten=True):
                                       [model.get_layer(layername).output])
     activations = []
     batch_size = int(batch_size)
-    for i in tqdm(range(int(np.ceil(len(data)/batch_size)))):
+    for i in tqdm(range(int(np.ceil(len(data)/batch_size))), desc='Feature extraction'):
         batch = np.array(data[i*batch_size:(i+1)*batch_size], dtype=np.float32)
         act = get_layer_output([batch,0])[0]
         activations.extend(act)
@@ -135,7 +135,581 @@ def test_data_cnn_rnn(data, target, cnn, layername, rnn):
 
 
 #%%
-class Checkpoint(keras.callbacks.Callback):
+class Checkpoint_balanced(keras.callbacks.Callback):
+    """
+    Callback routine for Keras
+    Calculates accuracy and f1-score on the validation data
+    Implements early stopping if no improvement on validation data for X epochs
+    """
+    def __init__(self,val_gen, bal_gen=None, train_gen=None, counter = 0, verbose=0, 
+                 epochs_to_stop=15, plot = False, name = ''):
+        super(Checkpoint_balanced, self).__init__()
+        
+        assert (bal_gen is None) == (train_gen is None), 'Must give train generator if balanced generator is present'
+        self.balanced = False if bal_gen is None else True
+        self.bgen = bal_gen
+        self.tgen = train_gen
+        self.gen = val_gen
+        self.nclasses = val_gen.Y.shape[-1]
+        self.best_weights = None
+        self.verbose = verbose
+        self.counter = counter
+        self.plot = plot
+        self.epochs_to_stop = epochs_to_stop
+        self.figures = []
+        self.name = name
+              
+    def on_train_begin(self, logs={}):
+        self.loss = []
+        self.val_loss = []
+        self.acc = []
+        self.val_f1 = []
+        self.val_acc = []
+        self.per_class = [[] for i in range(self.nclasses)]
+        self.start = time.time()
+        
+        self.not_improved=0
+        self.best_f1 = 0
+        self.best_acc = 0
+        self.best_epoch = 0
+        if self.plot: 
+            self.figures.append(plt.figure(figsize=(10,8)))
+        
+    def on_epoch_end(self, epoch, logs={}):
+        self.gen.reset() # to be sure
+        if self.balanced:
+            self.tgen.reset()
+            y_tpred = np.array(self.model.predict_generator(self.tgen, self.tgen.n_batches, max_q_size=1))
+            self.bgen.pmatrix = y_tpred
+            
+        y_pred = np.array(self.model.predict_generator(self.gen, self.gen.n_batches, max_q_size=1))
+        y_true = self.gen.Y
+        
+        f1 = f1_score(np.argmax(y_true,1),np.argmax(y_pred,1), average="macro")
+        acc = accuracy_score(np.argmax(y_true,1),np.argmax(y_pred,1))
+#        val_loss = keras.metrics.categorical_crossentropy(y_true, np.argmax(y_pred))
+        val_loss = log_loss(y_true, y_pred)
+        self.loss.append(logs.get('loss'))
+        self.acc.append(logs.get('categorical_accuracy'))
+        self.val_loss.append(val_loss)
+        self.val_f1.append(f1)
+        self.val_acc.append(acc)
+
+        if f1 > self.best_f1:
+            self.not_improved = 0
+            self.best_f1 = f1
+            self.best_acc = acc
+            self.best_epoch = epoch
+            self.best_weights = self.model.get_weights()
+            if self.verbose==1: print('+', end='')
+        else:
+            self.not_improved += 1
+            if self.verbose==1: print('.', end='', flush=True)
+            if self.not_improved > self.epochs_to_stop and self.epochs_to_stop:
+                print("\nNo improvement after epoch {}".format(epoch), flush=True)
+                self.model.stop_training = True
+
+        y_pred = np.argmax(y_pred,1)
+        y_true = np.argmax(y_true,1)
+        for i in range(self.nclasses):
+            self.per_class[i].append(np.mean((y_true[y_true==i])==(y_pred[y_true==i])))
+        confmat = confusion_matrix(y_true, y_pred)    
+            
+        if self.plot:
+            plt.clf()
+            plt.subplot(2,2,1)
+            plt.plot(self.loss)
+            plt.plot(self.val_loss, 'r')
+            plt.title('Loss')
+            plt.legend(['loss', 'val_loss'])
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.subplot(2,2,2)
+            plt.plot(self.val_acc)
+            plt.plot(self.val_f1)
+            plt.legend(['val acc', 'val f1'])
+            plt.xlabel('Epoch')
+            plt.ylabel('%')
+            plt.title('Best: acc {:.1f}, f1 {:.1f}'.format(self.best_acc*100,self.best_f1*100))
+            plt.subplot(2,2,3)
+            for i in range(self.nclasses):
+                plt.plot(self.per_class[i])
+            plt.legend(['W', 'S1', 'S2', 'SWS', 'REM'])
+            plt.title('Per class accuracy')
+            plt.subplot(2,2,4)
+            tools.plot_confusion_matrix('',confmat,['W', 'S1', 'S2', 'SWS', 'REM'])
+            plt.title('Epoch {}'.format(len(self.loss)))
+            plt.suptitle(self.name)
+            plt.show()
+            plt.pause(0.0001)
+        if self.verbose == 2:
+            print('Epoch {}: , current: {:.1f}/{:.1f}, best: {:.1f}/{:.1f}'.format(epoch, acc*100, f1*100, self.best_acc*100 , self.best_f1*100))
+        
+    def on_train_end(self, logs={}):
+        self.model.set_weights(self.best_weights)
+        if self.verbose > 0: print(' {:.1f} min'.format((time.time()-self.start)/60), flush=True)
+        try: plt.savefig(os.path.join('.','plots', '{}_{}_{}.png'.format(self.counter, self.name, self.model.name)))
+        except Exception:pass
+#        try:
+#            self.model.save(os.path.join('.','weights', str(self.counter) + self.model.name))
+#        except Exception as error:
+#            print("Got an error while saving model: {}".format(error))
+#        return
+    
+
+    
+
+#%%
+class generator_balanced(object):
+    """
+        Data generator util for Keras. 
+        Generates data in such a way that it can be used with a stateful RNN
+
+    :param X: data (either train or val) with shape 
+    :param Y: labels (either train or val) with shape 
+    :param num_of_batches: number of batches (np.ceil(len(Y)/batch_size) for non truncated mode 
+    :param sequential: for stateful training
+    :param truncate: Only yield full batches, in sequential mode the batches will be wrapped in case of false
+    :param val: it only returns the data without the target
+    :param random: randomize pos or neg within a batch, ignored in sequential mode 
+    
+    :return: patches (batch_size, 15, 15, 15) and labels (batch_size,)
+    """
+    def __init__(self, X, Y, batch_size, cropsize=0):
+        
+        assert len(X) == len(Y), 'X and Y must be the same length {}!={}'.format(len(X),len(Y))
+        print('starting balanced generator')
+        self.X = X
+        self.Y = Y
+        self.cropsize=cropsize
+        self.batch_size = int(batch_size)
+        self.pmatrix = np.ones_like(self.Y)
+        self.reset()
+        
+    def reset(self):
+        """ Resets the state of the generator"""
+        self.step = 0
+        Y = np.argmax(self.Y,1)
+        labels = np.unique(Y)
+        idx = []
+        smallest = len(Y)
+        for i,label in enumerate(labels):
+            where = np.where(Y==label)[0]
+            if smallest > len(where): 
+                self.slabel = i
+                smallest = len(where)
+            idx.append(where)
+        self.idx = idx
+        self.labels = labels
+        self.n_per_class = int(self.batch_size // len(labels))
+        self.n_batches = int(np.ceil((smallest//self.n_per_class)))+1
+        self.update_probabilities()
+        
+    def update_probabilities(self):
+        Y = np.argmax(self.Y,1)
+        p = []
+        for label in self.labels:
+            where = np.where(Y==label)[0]
+            proba = self.pmatrix[:, label][where]
+            proba = 1-(proba / np.sum(proba))
+            proba = proba / np.sum(proba)
+            p.append(proba)
+        self.p = p
+    
+    def __next__(self):
+        if self.step==self.n_batches:
+            self.reset()
+        x_batch = []
+        y_batch = []
+        for label in self.labels:
+            idx = self.idx[label]
+            if len(idx)< self.n_per_class:
+                x_batch.extend([self.X[i] for i in idx])
+                y_batch.extend([self.Y[i] for i in idx])
+                self.idx[label] = []
+            else:
+                number = self.n_per_class if label!=self.slabel else self.n_per_class
+                indexes      = np.random.choice(np.arange(idx.size), int(number*0.7 if label==3 else number), replace = False)
+                choice = idx[indexes]
+                x_batch.extend([self.X[i] for i in choice])
+                y_batch.extend([self.Y[i] for i in choice])
+                self.idx[label] = np.delete (self.idx[label], indexes)
+                self.p[label]   = np.delete (self.p[label], indexes)
+                self.p[label]   = self.p[label] / np.sum(self.p[label])
+                if label == 3:
+                    idx = self.idx[label]
+                    indexes_hard    = np.random.choice(np.arange(idx.size), int(number*0.3), p=self.p[label], replace = False)
+                    choice = idx[indexes_hard]
+                    x_batch.extend([self.X[i] for i in choice])
+                    y_batch.extend([self.Y[i] for i in choice])
+                    self.idx[label] = np.delete (self.idx[label], indexes_hard)
+                    self.p[label]   = np.delete (self.p[label], indexes_hard)
+                    self.p[label]   = self.p[label] / np.sum(self.p[label])
+                
+        diff = len(x_batch[0]) - self.cropsize
+        
+        if self.cropsize!=0:
+            start = np.random.choice(np.arange(0,diff+5,5), len(x_batch))
+            x_batch = [x[start[i]:start[i]+self.cropsize,:] for i,x in enumerate(x_batch)]
+
+        x_batch = np.array(x_batch, dtype=np.float32)
+        y_batch = np.array(y_batch, dtype=np.int32)
+    
+        self.step+=1
+        return (x_batch, y_batch)  
+        
+
+
+
+         
+class generator(object):
+    """
+        Data generator util for Keras. 
+        Generates data in such a way that it can be used with a stateful RNN
+
+    :param X: data (either train or val) with shape 
+    :param Y: labels (either train or val) with shape 
+    :param num_of_batches: number of batches (np.ceil(len(Y)/batch_size) for non truncated mode 
+    :param sequential: for stateful training
+    :param truncate: Only yield full batches, in sequential mode the batches will be wrapped in case of false
+    :param val: it only returns the data without the target
+    :param random: randomize pos or neg within a batch, ignored in sequential mode 
+    
+    :return: patches (batch_size, 15, 15, 15) and labels (batch_size,)
+    """
+    def __init__(self, X, Y, batch_size,cropsize=0, truncate=False, sequential=False,
+                 random=True, val=False, class_weights=None):
+        
+        assert len(X) == len(Y), 'X and Y must be the same length {}!={}'.format(len(X),len(Y))
+        if sequential: print('Using sequential mode')
+        
+        self.X = X
+        self.Y = Y
+        self.rnd_idx = np.arange(len(Y))
+        self.Y_last_epoch = []
+        self.val = val
+        self.step = 0
+        self.i = 0
+        self.cropsize=cropsize
+        self.truncate = truncate
+        self.random = False if sequential or val else random
+        self.batch_size = int(batch_size)
+        self.sequential = sequential
+        self.c_weights = class_weights if class_weights else dict(zip(np.unique(np.argmax(Y,1)),np.ones(len(np.argmax(Y,1)))))
+        assert set(np.argmax(Y,1)) == set([int(x) for x in self.c_weights.keys()]), 'not all labels in class weights'
+        self.n_batches = int(len(X)//batch_size if truncate else np.ceil(len(X)/batch_size))
+        if self.random: self.randomize()
+            
+        
+    def reset(self):
+        """ Resets the state of the generator"""
+        self.step = 0
+        self.Y_last_epoch = []
+        
+        
+    def randomize(self):
+        self.X, self.Y, self.rnd_idx = shuffle(self.X, self.Y, self.rnd_idx)
+        
+    def get_Y(self):
+        """ Get the last targets that were created/shuffled"""
+        print('This feature is disabled. Please access generator.Y without shuffling.')
+        if self.sequential or self.truncate:
+            y_len = self.n_batches * self.batch_size
+        else:
+            y_len = len(self.Y)
+        if self.val and (len(self.Y)!=y_len): print('not same length!')
+        return np.array(self.Y_last_epoch, dtype=np.int32)[:y_len]
+#        return np.array([x[0] for x in self.Y_last_epoch])
+    
+    def __next__(self):
+        self.i +=1
+        if self.step==self.n_batches:
+            self.step = 0
+            if self.random: self.randomize()
+        if self.sequential: 
+            return self.next_sequential()
+        else:
+            return self.next_normal()
+        
+    def next_normal(self):
+        x_batch = self.X[self.step*self.batch_size:(self.step+1)*self.batch_size]
+        y_batch = self.Y[self.step*self.batch_size:(self.step+1)*self.batch_size]
+        diff = (len(x_batch[0]) - self.cropsize)//2
+        if self.cropsize !=0:
+            x_batch = [x[diff:diff+self.cropsize] for i,x in enumerate(x_batch)]
+        x_batch = np.array(x_batch, dtype=np.float32)
+        y_batch = np.array(y_batch, dtype=np.int32)
+        self.step+=1
+        if self.val:
+            self.Y_last_epoch.extend(y_batch)
+            return x_batch # for validation generator, save the new y_labels
+        else:
+            weights = np.ones(len(y_batch))
+            for t in np.unique(np.argmax(y_batch,1)):
+                weights[np.argmax(y_batch,1)==t] = self.c_weights[t]
+            return (x_batch,y_batch, weights)  
+        
+    def next_sequential(self):
+        x_batch = np.array([self.X[(seq * self.n_batches + self.step) % len(self.X)] for seq in range(self.batch_size)], dtype=np.float32)
+        y_batch = np.array([self.Y[(seq * self.n_batches + self.step) % len(self.X)] for seq in range(self.batch_size)], dtype=np.int32)
+        if self.cropsize !=0:
+            x_batch = [x[diff:diff+self.cropsize] for i,x in enumerate(x_batch)]
+            y_batch = [x[diff:diff+self.cropsize] for i,x in enumerate(y_batch)]
+        
+        self.step+=1
+        if self.val:
+            self.Y_last_epoch.extend(y_batch)
+            return x_batch # for validation generator, save the new y_labels
+        else:
+            return (x_batch,y_batch) 
+        
+#%%
+
+def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size=512,
+       val_batch_size=0, stop_after=0, name='', counter=0, plot = True, balanced=False, cropsize=0):
+    """
+    Crossvalidation routinge for an RNN using extracted features on a basemodel
+    :param rnns: list with the following:
+                 [rnnfun, [layernames], seqlen, batch_size]
+    :param ...: should be self-explanatory
+
+    :returns results: dictionary with all RNN results
+    """
+    if val_batch_size == 0: val_batch_size = batch_size
+    input_shape = list((np.array(data[0])).shape) #train_data.shape
+    n_classes = targets.shape[1]
+    
+    
+    
+    gcv = GroupKFold(folds)
+    results    = {name + '_' + modfun.__name__:[]}
+    if rnn:
+        for lname in rnn['layers']:
+            results[name + '_' + lname] = []
+    
+    for i, idxs in enumerate(gcv.split(groups, groups, groups)):
+        K.clear_session()
+        print('-----------------------------')
+        print('Starting fold {}: {}-{} at {}'.format(i+1,modfun.__name__, name, time.ctime()))
+        train_idx, test_idx = idxs
+        sub_cv = GroupKFold(folds)
+        train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).__next__()
+        val_idx      = train_idx[val_idx]  
+        train_idx    = train_idx[train_sub_idx]
+        
+        train_data   = [data[i] for i in train_idx]
+        train_target = targets[train_idx]
+        val_data     = [data[i] for i in val_idx]
+        val_target   = targets[val_idx]
+        test_data    = [data[i] for i in test_idx]       
+        test_target  = targets[test_idx]
+        
+        model = modfun(input_shape, n_classes)
+        modelname = model.name
+        lname = modelname
+        g_train= generator(train_data, train_target, batch_size, val=True, cropsize=cropsize)
+        g_val  = generator(val_data, val_target, batch_size, val=True, cropsize=cropsize)
+        g_test = generator(test_data, test_target, batch_size, val=True, cropsize=cropsize)
+        if balanced:
+            g = generator_balanced(train_data, train_target, batch_size,cropsize=cropsize)
+            cb  = Checkpoint_balanced(g_val, g, g_train, verbose=1, counter=counter, 
+                 epochs_to_stop=stop_after, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
+        else:
+            g = generator(train_data, train_target, batch_size, random=True, cropsize=cropsize)
+            cb  = Checkpoint_balanced(g_val, verbose=1, counter=counter, 
+                 epochs_to_stop=stop_after, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
+        
+        model.fit_generator(g, g.n_batches, verbose=0, epochs=epochs, callbacks=[cb], max_q_size=1)
+        
+        y_pred = model.predict_generator(g_test, g_test.n_batches, max_q_size=1)
+        y_true = g_test.Y
+        val_acc = cb.best_acc
+        val_f1  = cb.best_f1
+        test_acc = accuracy_score(np.argmax(y_true,1),np.argmax(y_pred,1))
+        test_f1  = f1_score(np.argmax(y_true,1),np.argmax(y_pred,1), average="macro")
+        confmat = confusion_matrix(np.argmax(y_true,1),np.argmax(y_pred,1))
+        results[name + '_' + modfun.__name__].append([cb.best_acc, cb.best_f1, test_acc, test_f1, confmat])
+        try: model.save(os.path.join('.','weights', str(counter) + name + model.name + '_' + str(i) + "_{:.3f}-{:.3f}".format(test_acc,test_f1)))
+        except Exception as error:  print("Got an error while saving model: {}".format(error))
+        print('ANN results: val acc/f1: {:.5f}/{:.5f}, test acc/f1: {:.5f}/{:.5f}'.format(cb.best_acc, cb.best_f1, test_acc, test_f1))
+
+        if rnn:
+            rnn_modelfun = rnn['model'] 
+            layernames = rnn['layers']
+            seq = rnn['seqlen']
+            rnn_bs = rnn['batch_size']
+            rnn_epochs = rnn['epochs']
+            stopafter_rnn = rnn['stop_after']
+            
+            for lname in layernames:
+                extracted = get_activations(model, train_data + val_data + test_data, lname, batch_size)
+                train_data_extracted = extracted[0:len(train_data)]
+                val_data_extracted   = extracted[len(train_data):len(train_data)+len(val_data)]
+                test_data_extracted  = extracted[len(train_data)+len(val_data):]
+                assert (len(train_data)==len(train_data_extracted)) and (len(test_data)==len(test_data_extracted)) and (len(val_data)==len(val_data_extracted))
+                train_data_seq, train_target_seq = tools.to_sequences(train_data_extracted, train_target, seqlen=seq)
+                val_data_seq, val_target_seq     = tools.to_sequences(val_data_extracted, val_target, seqlen=seq)
+                test_data_seq, test_target_seq   = tools.to_sequences(test_data_extracted, test_target, seqlen=seq)
+             
+                rnn_shape  = list((np.array(train_data_seq[0])).shape)
+                neurons = int(np.sqrt(rnn_shape[-1])*4)
+                print('Starting RNN model with input from layer {}: {} at {}'.format(lname, rnn_shape, time.ctime()))
+                rnn_model  = rnn_modelfun(rnn_shape, n_classes, layers=2, neurons=neurons, dropout=0.3)
+                
+                g_val  = generator(val_data_seq, val_target_seq, rnn_bs, val=True,cropsize=cropsize)
+                g_test = generator(test_data_seq, test_target_seq, rnn_bs, val=True,cropsize=cropsize)
+                g_train= generator(train_data_seq, train_target_seq, batch_size, val=True,cropsize=cropsize)
+                if balanced:
+                    g = generator_balanced(train_data_seq, train_target_seq, batch_size,cropsize=cropsize)
+                    cb = Checkpoint_balanced(g_val, g, g_train, verbose=1, counter=counter, 
+                         epochs_to_stop=stopafter_rnn, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
+                else:              
+                    g = generator(train_data_seq, train_target_seq, rnn_bs,cropsize=cropsize)
+                    cb = Checkpoint_balanced(g_val, verbose=1, counter=counter, 
+                         epochs_to_stop=stopafter_rnn, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
+                
+                rnn_model.fit_generator(g, g.n_batches, epochs=rnn_epochs, verbose=0, callbacks=[cb])    
+                y_pred = rnn_model.predict_generator(g_test, g_test.n_batches, max_q_size=1)
+                y_true = g_test.Y
+                val_acc = cb.best_acc
+                val_f1  = cb.best_f1
+                test_acc = accuracy_score(np.argmax(y_true,1),np.argmax(y_pred,1))
+                test_f1  = f1_score(np.argmax(y_true,1),np.argmax(y_pred,1), average="macro")
+                try: rnn_model.save(os.path.join('.','weights', str(counter)+ name + lname + '_' + str(i) + "_{:.3f}-{:.3f}".format(test_acc,test_f1)))
+                except Exception as error:  print("Got an error while saving model: {}".format(error))
+                confmat = confusion_matrix(np.argmax(y_true,1),np.argmax(y_pred,1))
+                results[name + '_' + lname].append([val_acc, val_f1, test_acc, test_f1, confmat])
+                print('fold {}: val acc/f1: {:.5f}/{:.5f}, test acc/f1: {:.5f}/{:.5f}'.format(i,cb.best_acc, cb.best_f1, test_acc, test_f1))
+
+            save_dict = {'1 Number':counter,
+                         '2 Time':time.ctime(),
+                         '3 CV':'{}/{}.'.format(i+1, folds),
+                         '5 Model': lname,
+                         '100 Comment': name,
+                         '10 Epochs': epochs,
+                         '11 Val acc': '{:.2f}'.format(val_acc*100),
+                         '12 Val f1': '{:.2f}'.format(val_f1*100),
+                         '13 Test acc':'{:.2f}'.format( test_acc*100),
+                         '14 Test f1': '{:.2f}'.format(test_f1*100),
+                         'Test Conf': str(confmat).replace('\n','')}
+            tools.save_results(save_dict=save_dict)
+        
+        
+        try:
+            with open('{}_{}_{}_results.pkl'.format(counter,modelname,name), 'wb') as f:
+                pickle.dump(results, f)
+        except Exception as e:
+            print("Error while saving results: ", e)
+        sys.stdout.flush()
+        
+    return results
+
+#%%
+def test_model(data, targets, groups, testdata, modfun, epochs=250, batch_size=512,
+       val_batch_size=0, stop_after=0, name='', counter=0, plot = True):
+    """
+    Train a model on the data
+    
+    :param ...: should be self-explanatory
+
+    :returns results: (best_val_acc, best_val_f1, best_test_acc, best_test_f1)
+    """
+    return
+#%%
+
+
+print('loaded keras_utils.py')
+
+#%% OLD STUFF
+def cv_old(data, targets, groups, modfun, epochs=250, folds=5, batch_size=512, val_batch_size=0, 
+       stop_after=0, name='', counter=0, plot = True, balanced=False, cropsize=0):
+    """
+    Crossvalidation routinge for training with a keras model.
+    
+    :param ...: should be self-explanatory
+
+    :returns results: (best_val_acc, best_val_f1, best_test_acc, best_test_f1)
+    """
+    if val_batch_size == 0: val_batch_size = batch_size
+    input_shape = list((np.array(data[0])).shape) #train_data.shape
+    if cropsize!=0:
+        input_shape[0] = cropsize
+    n_classes = targets.shape[1]
+    
+    print('Starting {}:{} at {}'.format(modfun.__name__, name, time.ctime()))
+    
+    global results
+    results = []
+    gcv = GroupKFold(folds)
+    
+    for i, idxs in enumerate(gcv.split(groups, groups, groups)):
+        K.clear_session()
+        train_idx, test_idx = idxs
+        sub_cv = GroupKFold(folds)
+        train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).__next__()
+        val_idx      = train_idx[val_idx]  
+        train_idx    = train_idx[train_sub_idx]
+        
+        train_data   = [data[i] for i in train_idx]
+        train_target = targets[train_idx]
+        val_data     = [data[i] for i in val_idx]
+        val_target   = targets[val_idx]
+        test_data    = [data[i] for i in test_idx]       
+        test_target  = targets[test_idx]
+        
+        model = modfun(input_shape, n_classes)
+        modelname = model.name
+        if balanced:
+            g  = generator_balanced(train_data, train_target, batch_size,cropsize=cropsize)
+            g_train = generator(train_data, train_target, batch_size, val=True,cropsize=cropsize)
+            g_val  = generator(val_data, val_target, batch_size, val=True,cropsize=cropsize)
+            g_test = generator(test_data, test_target, batch_size, val=True,cropsize=cropsize)
+            cb     = Checkpoint_balanced(g_val,g,g_train, verbose=1, counter=counter, 
+                     epochs_to_stop=stop_after, plot = plot)
+        else:
+            g  = generator(train_data, train_target, batch_size, random=True,cropsize=cropsize)
+            g_val  = generator(val_data, val_target, batch_size, val=True,cropsize=cropsize)
+            g_test = generator(test_data, test_target, batch_size, val=True,cropsize=cropsize)
+            cb     = Checkpoint_balanced(g_val, verbose=1, counter=counter, 
+                     epochs_to_stop=stop_after, plot = plot)
+        model.fit_generator(g, g.n_batches, verbose=0, epochs=epochs, callbacks=[cb], max_q_size=1)
+        predmodel = model
+        
+        
+        y_pred = predmodel.predict_generator(g_test, g_test.n_batches, max_q_size=1)
+        y_true = g_test.Y
+        val_acc = cb.best_acc
+        val_f1  = cb.best_f1
+        test_acc = accuracy_score(np.argmax(y_true,1),np.argmax(y_pred,1))
+        test_f1  = f1_score(np.argmax(y_true,1),np.argmax(y_pred,1), average="macro")
+        
+        confmat = confusion_matrix(np.argmax(y_true,1),np.argmax(y_pred,1))
+        
+        print('fold {}: val acc/f1: {:.5f}/{:.5f}, test acc/f1: {:.5f}/{:.5f}'.format(i,cb.best_acc, cb.best_f1, test_acc, test_f1))
+        save_dict = {'1 Number':counter,
+                     '2 Time':time.ctime(),
+                     '3 CV':'{}/{}.'.format(i+1, folds),
+                     '5 Model': modelname,
+                     '100 Comment': name,
+                     '10 Epochs': epochs,
+                     '11 Val acc': '{:.2f}'.format(val_acc*100),
+                     '12 Val f1': '{:.2f}'.format(val_f1*100),
+                     '13 Test acc':'{:.2f}'.format( test_acc*100),
+                     '14 Test f1': '{:.2f}'.format(test_f1*100),
+                     'Test Conf': str(confmat).replace('\n','')}
+        tools.save_results(save_dict=save_dict)
+        results.append([val_acc, val_f1, test_acc, test_f1, confmat])
+        
+        try:
+            with open('{}_{}_{}_results.pkl'.format(counter,modelname,name), 'wb') as f:
+                pickle.dump(results, f)
+        except Exception as e:
+            print("Error while saving results: ", e)
+        sys.stdout.flush()
+        
+    return results
+
+class Checkpoint_old(keras.callbacks.Callback):
     """
     Callback routine for Keras
     Calculates accuracy and f1-score on the validation data
@@ -224,389 +798,3 @@ class Checkpoint(keras.callbacks.Callback):
     def on_train_end(self, logs={}):
         self.model.set_weights(self.best_weights)
         if self.verbose > 0: print(' {:.1f} min'.format((time.time()-self.start)/60), flush=True)
-        try:
-            self.model.save(os.path.join('.','weights', str(self.counter) + self.model.name))
-        except Exception as error:
-            print("Got an error while saving model: {}".format(error))
-        return
-    
-
-#%%
-class generator_balanced(object):
-    """
-        Data generator util for Keras. 
-        Generates data in such a way that it can be used with a stateful RNN
-
-    :param X: data (either train or val) with shape 
-    :param Y: labels (either train or val) with shape 
-    :param num_of_batches: number of batches (np.ceil(len(Y)/batch_size) for non truncated mode 
-    :param sequential: for stateful training
-    :param truncate: Only yield full batches, in sequential mode the batches will be wrapped in case of false
-    :param val: it only returns the data without the target
-    :param random: randomize pos or neg within a batch, ignored in sequential mode 
-    
-    :return: patches (batch_size, 15, 15, 15) and labels (batch_size,)
-    """
-    def __init__(self, X, Y, batch_size):
-        
-        assert len(X) == len(Y), 'X and Y must be the same length {}!={}'.format(len(X),len(Y))
-        self.X = X
-        self.Y = Y
-        self.batch_size = int(batch_size)
-        self.reset()
-        
-    def reset(self):
-        """ Resets the state of the generator"""
-        self.step = 0
-        Y = np.argmax(self.Y,1)
-        labels = np.unique(Y)
-        idx = []
-        p = []
-        smallest = len(Y)
-        for i,label in enumerate(labels):
-            where = np.where(Y==label)[0]
-            if smallest > len(where): 
-                self.slabel = i
-                smallest = len(where)
-            idx.append(where)
-            p.append(np.ones(len(where))/len(where))
-        self.p = p
-        self.idx = idx
-        self.labels = labels
-        self.n_per_class = int(self.batch_size // len(labels))
-        self.n_batches = int(np.ceil((smallest//self.n_per_class)*3))+1
-        
-        
-    
-    def __next__(self):
-        if self.step==self.n_batches:
-            self.reset()
-        x_batch = []
-        y_batch = []
-        for label in self.labels:
-            idx = self.idx[label]
-            if len(idx)< self.n_per_class:
-                x_batch.extend([self.X[i] for i in idx])
-                y_batch.extend([self.Y[i] for i in idx])
-                self.idx[label] = []
-            else:
-                number = self.n_per_class if label!=1 else self.n_per_class//3
-                indexes = np.random.choice(np.arange(idx.size), number, p=self.p, replace = False)
-                choice = idx[indexes]
-                x_batch.extend([self.X[i] for i in choice])
-                y_batch.extend([self.Y[i] for i in choice])
-                self.idx[label] = np.delete (self.idx[label], indexes)
-                self.p[label] = np.delete (self.p[label], indexes)
-                    
-        x_batch = np.array(x_batch, dtype=np.float32)
-        y_batch = np.array(y_batch, dtype=np.int32)
-    
-        self.step+=1
-        return (x_batch, y_batch)  
-        
-
-
-
-         
-class generator(object):
-    """
-        Data generator util for Keras. 
-        Generates data in such a way that it can be used with a stateful RNN
-
-    :param X: data (either train or val) with shape 
-    :param Y: labels (either train or val) with shape 
-    :param num_of_batches: number of batches (np.ceil(len(Y)/batch_size) for non truncated mode 
-    :param sequential: for stateful training
-    :param truncate: Only yield full batches, in sequential mode the batches will be wrapped in case of false
-    :param val: it only returns the data without the target
-    :param random: randomize pos or neg within a batch, ignored in sequential mode 
-    
-    :return: patches (batch_size, 15, 15, 15) and labels (batch_size,)
-    """
-    def __init__(self, X, Y, batch_size, truncate=False, sequential=False, random=True, val=False, class_weights=None):
-        
-        assert len(X) == len(Y), 'X and Y must be the same length {}!={}'.format(len(X),len(Y))
-        if sequential: print('Using sequential mode')
-        
-        self.X = X
-        self.Y = Y
-        self.rnd_idx = np.arange(len(Y))
-        self.Y_last_epoch = []
-        self.val = val
-        self.step = 0
-        self.i = 0
-        self.truncate = truncate
-        self.random = False if sequential or val else random
-        self.batch_size = int(batch_size)
-        self.sequential = sequential
-        self.c_weights = class_weights if class_weights else dict(zip(np.unique(np.argmax(Y,1)),np.ones(len(np.argmax(Y,1)))))
-        assert set(np.argmax(Y,1)) == set([int(x) for x in self.c_weights.keys()]), 'not all labels in class weights'
-        self.n_batches = int(len(X)//batch_size if truncate else np.ceil(len(X)/batch_size))
-        if self.random: self.randomize()
-            
-        
-    def reset(self):
-        """ Resets the state of the generator"""
-        self.step = 0
-        self.Y_last_epoch = []
-        
-        
-    def randomize(self):
-        self.X, self.Y, self.rnd_idx = shuffle(self.X, self.Y, self.rnd_idx)
-        
-    def get_Y(self):
-        """ Get the last targets that were created/shuffled"""
-        print('This feature is disabled. Please access generator.Y without shuffling.')
-        if self.sequential or self.truncate:
-            y_len = self.n_batches * self.batch_size
-        else:
-            y_len = len(self.Y)
-        if self.val and (len(self.Y)!=y_len): print('not same length!')
-        return np.array(self.Y_last_epoch, dtype=np.int32)[:y_len]
-#        return np.array([x[0] for x in self.Y_last_epoch])
-    
-    def __next__(self):
-        self.i +=1
-        if self.step==self.n_batches:
-            self.step = 0
-            if self.random: self.randomize()
-        if self.sequential: 
-            return self.next_sequential()
-        else:
-            return self.next_normal()
-        
-    def next_normal(self):
-        x_batch = np.array(self.X[self.step*self.batch_size:(self.step+1)*self.batch_size], dtype=np.float32)
-        y_batch = np.array(self.Y[self.step*self.batch_size:(self.step+1)*self.batch_size], dtype=np.int32)
-
-            
-        self.step+=1
-        if self.val:
-            self.Y_last_epoch.extend(y_batch)
-            return x_batch # for validation generator, save the new y_labels
-        else:
-            weights = np.ones(len(y_batch))
-            for t in np.unique(np.argmax(y_batch,1)):
-                weights[np.argmax(y_batch,1)==t] = self.c_weights[t]
-            return (x_batch,y_batch, weights)  
-        
-    def next_sequential(self):
-        x_batch = np.array([self.X[(seq * self.n_batches + self.step) % len(self.X)] for seq in range(self.batch_size)], dtype=np.float32)
-        y_batch = np.array([self.Y[(seq * self.n_batches + self.step) % len(self.X)] for seq in range(self.batch_size)], dtype=np.int32)
-        self.step+=1
-        if self.val:
-            self.Y_last_epoch.extend(y_batch)
-            return x_batch # for validation generator, save the new y_labels
-        else:
-            return (x_batch,y_batch) 
-        
-#%%
-
-def cv_rnn(data, targets, groups, modfun, rnn, epochs=250, folds=5, batch_size=512,
-       val_batch_size=0, stop_after=0, name='', counter=0, plot = True):
-    """
-    Crossvalidation routinge for an RNN using extracted features on a basemodel
-    :param rnns: list with the following:
-                 [rnnfun, [layernames], seqlen, batch_size]
-    :param ...: should be self-explanatory
-
-    :returns results: dictionary with all RNN results
-    """
-    if val_batch_size == 0: val_batch_size = batch_size
-    input_shape = list((np.array(data[0])).shape) #train_data.shape
-    n_classes = targets.shape[1]
-    
-    
-    
-    gcv = GroupKFold(folds)
-    results    = {modfun.__name__:[]}
-    for lname in rnn[1]:
-        results[lname] = []
-    
-    for i, idxs in enumerate(gcv.split(groups, groups, groups)):
-        K.clear_session()
-        print('-----------------------------')
-        print('Starting fold {}: {}-{} at {}'.format(i,modfun.__name__, name, time.ctime()))
-        train_idx, test_idx = idxs
-        sub_cv = GroupKFold(folds)
-        train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).__next__()
-        val_idx      = train_idx[val_idx]  
-        train_idx    = train_idx[train_sub_idx]
-        
-        train_data   = [data[i] for i in train_idx]
-        train_target = targets[train_idx]
-        val_data     = [data[i] for i in val_idx]
-        val_target   = targets[val_idx]
-        test_data    = [data[i] for i in test_idx]       
-        test_target  = targets[test_idx]
-        
-        model = modfun(input_shape, n_classes)
-        modelname = model.name
-        g      = generator(train_data, train_target, batch_size, random=True)
-        g_val  = generator(val_data, val_target, batch_size, val=True)
-        g_test = generator(test_data, test_target, batch_size, val=True)
-        cb     = Checkpoint(g_val, verbose=1, counter=counter, 
-                 epochs_to_stop=stop_after, plot = plot)
-        model.fit_generator(g, g.n_batches, verbose=0, epochs=epochs, callbacks=[cb], max_q_size=1)
-        
-        y_pred = model.predict_generator(g_test, g_test.n_batches, max_q_size=1)
-        y_true = g_test.Y
-        test_acc = accuracy_score(np.argmax(y_true,1),np.argmax(y_pred,1))
-        test_f1  = f1_score(np.argmax(y_true,1),np.argmax(y_pred,1), average="macro")
-        confmat = confusion_matrix(np.argmax(y_true,1),np.argmax(y_pred,1))
-        results[modfun.__name__].append([cb.best_acc, cb.best_f1, test_acc, test_f1, confmat])
-        print('ANN results: val acc/f1: {:.5f}/{:.5f}, test acc/f1: {:.5f}/{:.5f}'.format(cb.best_acc, cb.best_f1, test_acc, test_f1))
-        
-        rnn_modelfun, layernames, seq, rnn_bs = rnn
-        
-        for lname in layernames:
-            train_data_extracted = get_activations(model, train_data, lname, batch_size)
-            val_data_extracted   = get_activations(model, val_data,   lname, batch_size)
-            test_data_extracted  = get_activations(model, test_data,  lname, batch_size)
-            train_data_seq, train_target_seq = tools.to_sequences(train_data_extracted, train_target, seqlen=seq)
-            val_data_seq, val_target_seq   = tools.to_sequences(val_data_extracted, val_target, seqlen=seq)
-            test_data_seq, test_target_seq  = tools.to_sequences(test_data_extracted, test_target, seqlen=seq)
-         
-            rnn_shape  = list((np.array(train_data_seq[0])).shape)
-            neurons = int(np.sqrt(rnn_shape[-1])*4)
-            print('Starting RNN model with input from layer {}: {} at {}'.format(lname, rnn_shape, time.ctime()))
-            rnn_model  = rnn_modelfun(rnn_shape, n_classes, layers=2, neurons=neurons, dropout=0.3)
-            
-            g      = generator(train_data_seq, train_target_seq, rnn_bs)
-            g_val  = generator(val_data_seq, val_target_seq, rnn_bs, val=True)
-            g_test = generator(test_data_seq, test_target_seq, rnn_bs, val=True)
-            cb     = Checkpoint(g_val, verbose=1, counter=counter, 
-                     epochs_to_stop=20, plot = plot)
-            
-            rnn_model.fit_generator(g, g.n_batches, epochs=epochs, verbose=0, callbacks=[cb])    
-            y_pred = rnn_model.predict_generator(g_test, g_test.n_batches, max_q_size=1)
-            y_true = g_test.Y
-            val_acc = cb.best_acc
-            val_f1  = cb.best_f1
-            test_acc = accuracy_score(np.argmax(y_true,1),np.argmax(y_pred,1))
-            test_f1  = f1_score(np.argmax(y_true,1),np.argmax(y_pred,1), average="macro")
-            confmat = confusion_matrix(np.argmax(y_true,1),np.argmax(y_pred,1))
-            results[lname].append([val_acc, val_f1, test_acc, test_f1, confmat])
-            print('fold {}: val acc/f1: {:.5f}/{:.5f}, test acc/f1: {:.5f}/{:.5f}'.format(i,cb.best_acc, cb.best_f1, test_acc, test_f1))
-
-            save_dict = {'1 Number':counter,
-                         '2 Time':time.ctime(),
-                         '3 CV':'{}/{}.'.format(i+1, folds),
-                         '5 Model': lname,
-                         '100 Comment': name,
-                         '10 Epochs': epochs,
-                         '11 Val acc': '{:.2f}'.format(val_acc*100),
-                         '12 Val f1': '{:.2f}'.format(val_f1*100),
-                         '13 Test acc':'{:.2f}'.format( test_acc*100),
-                         '14 Test f1': '{:.2f}'.format(test_f1*100),
-                         'Test Conf': str(confmat).replace('\n','')}
-            tools.save_results(save_dict=save_dict)
-        
-        
-        try:
-            with open('{}_{}_{}_results.pkl'.format(counter,modelname,name), 'wb') as f:
-                pickle.dump(results, f)
-        except Exception as e:
-            print("Error while saving results: ", e)
-        sys.stdout.flush()
-        
-    return results
-
-#%%
-def test_model(data, targets, groups, testdata, modfun, epochs=250, batch_size=512,
-       val_batch_size=0, stop_after=0, name='', counter=0, plot = True):
-    """
-    Train a model on the data
-    
-    :param ...: should be self-explanatory
-
-    :returns results: (best_val_acc, best_val_f1, best_test_acc, best_test_f1)
-    """
-    return
-#%%
-def cv(data, targets, groups, modfun, epochs=250, folds=5, batch_size=512, val_batch_size=0, 
-       stop_after=0, name='', counter=0, plot = True, balanced=False, weighted=False, log=False):
-    """
-    Crossvalidation routinge for training with a keras model.
-    
-    :param ...: should be self-explanatory
-
-    :returns results: (best_val_acc, best_val_f1, best_test_acc, best_test_f1)
-    """
-    if val_batch_size == 0: val_batch_size = batch_size
-    input_shape = list((np.array(data[0])).shape) #train_data.shape
-    n_classes = targets.shape[1]
-    
-    print('Starting {}:{} at {}'.format(modfun.__name__, name, time.ctime()))
-    
-    global results
-    results =[]
-    gcv = GroupKFold(folds)
-    
-    for i, idxs in enumerate(gcv.split(groups, groups, groups)):
-        K.clear_session()
-        train_idx, test_idx = idxs
-        sub_cv = GroupKFold(folds)
-        train_sub_idx, val_idx = sub_cv.split(groups[train_idx], groups[train_idx], groups[train_idx]).__next__()
-        val_idx      = train_idx[val_idx]  
-        train_idx    = train_idx[train_sub_idx]
-        
-        train_data   = [data[i] for i in train_idx]
-        train_target = targets[train_idx]
-        val_data     = [data[i] for i in val_idx]
-        val_target   = targets[val_idx]
-        test_data    = [data[i] for i in test_idx]       
-        test_target  = targets[test_idx]
-        c_weights    = class_weight.compute_class_weight('balanced', np.unique(np.argmax(train_target,1)), np.argmax(train_target,1) )
-        if log: c_weights = np.log2(c_weights+1)
-        c_weights    = dict(zip(np.arange(5), c_weights)) if weighted else None
-        
-        
-        model = modfun(input_shape, n_classes)
-        modelname = model.name
-        if balanced:
-            g  = generator_balanced(train_data, train_target, batch_size)
-        else:
-            g  = generator(train_data, train_target, batch_size, random=True, class_weights=c_weights)
-        g_val  = generator(val_data, val_target, batch_size, val=True)
-        g_test = generator(test_data, test_target, batch_size, val=True)
-        cb     = Checkpoint(g_val, verbose=1, counter=counter, 
-                 epochs_to_stop=stop_after, plot = plot)
-        model.fit_generator(g, g.n_batches, verbose=0, epochs=epochs, callbacks=[cb], max_q_size=1)
-        predmodel = model
-        
-        
-        y_pred = predmodel.predict_generator(g_test, g_test.n_batches, max_q_size=1)
-        y_true = g_test.Y
-        val_acc = cb.best_acc
-        val_f1  = cb.best_f1
-        test_acc = accuracy_score(np.argmax(y_true,1),np.argmax(y_pred,1))
-        test_f1  = f1_score(np.argmax(y_true,1),np.argmax(y_pred,1), average="macro")
-        
-        confmat = confusion_matrix(np.argmax(y_true,1),np.argmax(y_pred,1))
-        
-        print('fold {}: val acc/f1: {:.5f}/{:.5f}, test acc/f1: {:.5f}/{:.5f}'.format(i,cb.best_acc, cb.best_f1, test_acc, test_f1))
-        save_dict = {'1 Number':counter,
-                     '2 Time':time.ctime(),
-                     '3 CV':'{}/{}.'.format(i+1, folds),
-                     '5 Model': modelname,
-                     '100 Comment': name,
-                     '10 Epochs': epochs,
-                     '11 Val acc': '{:.2f}'.format(val_acc*100),
-                     '12 Val f1': '{:.2f}'.format(val_f1*100),
-                     '13 Test acc':'{:.2f}'.format( test_acc*100),
-                     '14 Test f1': '{:.2f}'.format(test_f1*100),
-                     'Test Conf': str(confmat).replace('\n','')}
-        tools.save_results(save_dict=save_dict)
-        results.append([val_acc, val_f1, test_acc, test_f1, confmat])
-        
-        try:
-            with open('{}_{}_{}_results.pkl'.format(counter,modelname,name), 'wb') as f:
-                pickle.dump(results, f)
-        except Exception as e:
-            print("Error while saving results: ", e)
-        sys.stdout.flush()
-        
-    return results
-
-print('loaded keras_utils.py')

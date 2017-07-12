@@ -14,19 +14,9 @@ import mne
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
-  
-    
-class Singleton(object):
-    
-  _instances = {}
-  def __new__(class_, *args, **kwargs):
-    if class_ not in class_._instances:
-        class_._instances[class_] = super(Singleton, class_).__new__(class_)#, *args, **kwargs)
-        
-    return class_._instances[class_]
-       
+         
 
-class SleepDataset(Singleton):
+class SleepDataset(object):
     loaded = False
     shuffle_index = list()
     subjects = list()
@@ -48,7 +38,7 @@ class SleepDataset(Singleton):
 
     def __init__(self, directory):
         """
-        :param directory: a directory string. yes it´s not a list yet.
+        :param directory: a directory string
         """
         if self.loaded == True:
             print("Data already loaded.")

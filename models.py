@@ -102,7 +102,7 @@ def cnn3adam_filter(input_shape, n_classes):
     model.add(BatchNormalization(name='fc2'))
     model.add(Dropout(0.5))
     model.add(Dense(n_classes, activation = 'softmax',name='softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer=Adam())
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(lr=0.0001))
     return model
 
 def cnn3adam_filter_l2(input_shape, n_classes):
@@ -170,16 +170,6 @@ def largeann(input_shape, n_classes, layers=3, neurons=2000, dropout=0.35 ):
 #%% everyhing recurrent for ANN
 
 
-def pure_rnn_do(input_shape, n_classes):
-    """
-    just replace ANN by RNNs
-    """
-    model = Sequential(name='pure_rnn_do')
-    model.add(LSTM(80,return_sequences=True, input_shape=input_shape, recurrent_dropout=0.3))
-    model.add(LSTM(80, return_sequences=False, recurrent_dropout=0.3))
-    model.add(Dense(n_classes, activation = 'softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
-    return model
 
 def ann_rnn(input_shape, n_classes):
     """
@@ -197,7 +187,7 @@ def ann_rnn(input_shape, n_classes):
     model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=[keras.metrics.categorical_accuracy])
     return model
 
-def pure_rnn(input_shape, n_classes,layers=2, neurons=80, dropout=0):
+def pure_rnn_do(input_shape, n_classes,layers=2, neurons=80, dropout=0.3):
     """
     just replace ANN by RNNs
     """

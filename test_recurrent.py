@@ -14,7 +14,8 @@ import tools
 import scipy
 import models
 import pickle
-from keras_utils import cv, cv_rnn
+import keras_utils
+from keras_utils import cv
 if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
 import matplotlib; matplotlib.rcParams['figure.figsize'] = (10, 3)
 np.random.seed(42)
@@ -55,13 +56,6 @@ def load_data(tsinalis=False):
 
     target[target==8] = 0
     target = keras.utils.to_categorical(target)
-    if tsinalis:
-        data = data[:,:,0]
-        data = tools.future(data,4)
-        data = np.expand_dims(data,-1)
-        data = np.expand_dims(data,1)
-#    else:
-#        data = np.swapaxes(data,1,2)
     return data, target, groups
     
 data,target,groups = load_data()
@@ -105,12 +99,11 @@ print("starting at")
 #            pickle.dump(r, f)
 #%%
 ##%%   seqlen = 6, 5-fold
-#r = dict()
-#batch_size = 1440
+##r = dict()
+#batch_size = 512
 #feats_seq, target_seq, group_seq = tools.to_sequences(feats, target, groups, seqlen = 6, tolist=False)
-#r['pure_rrn_do_6_weighted5-'] = cv(feats_seq, target_seq, group_seq, models.pure_rnn_do,
-#                                name=str(6),epochs=300, folds=5, batch_size=batch_size, 
-#                                counter=counter, plot=True, stop_after=15)
+#r = keras_utils.cv(feats_seq, target_seq, group_seq, models.pure_rnn_do,epochs=2, folds=5, batch_size=batch_size, name='test',
+#                                counter=counter, plot=True, stop_after=15, balanced=True)
 ##
 #with open('results_recurrent_seqlen-6-w5.pkl', 'wb') as f:
 #            pickle.dump(r, f)
@@ -119,7 +112,7 @@ print("starting at")
 #%%   seqlen = 6, 5-fold mit past
 #r = dict()
 #batch_size = 1440
-feats_seq, target_seq, group_seq = tools.to_sequences(feats, target, groups, seqlen = 6, tolist=False)
+#feats_seq, target_seq, group_seq = tools.to_sequences(feats, target, groups, seqlen = 6, tolist=False)
 #r['pure_rrn_do_6_weighted-'] = cv(feats_seq, target_seq, group_seq, models.pure_rnn_do,
 #                                name=str(6),epochs=300, folds=10, batch_size=batch_size, 
 #                                counter=counter, plot=True, stop_after=15, weighted=True)
@@ -131,30 +124,19 @@ feats_seq, target_seq, group_seq = tools.to_sequences(feats, target, groups, seq
 #            pickle.dump(r, f)
 #%%
 #
-#batch_size = 512
-#epochs = 250
+batch_size = 128
+epochs = 50
 #
 #
 #gc.collect()
 ##
-##
-#rnn = [models.pure_rnn, ['fc1', 'fc2','conv3', 'softmax'], 6, 128]
-#r = cv_rnn (data, target, groups, models.cnn3adam_filter, rnn, name='rnn_extracted',
-#                         epochs=epochs, folds=5,batch_size=batch_size, counter=counter,
-#                         plot=True, stop_after=25)
-
-
+###
+rnn = {'model':models.pure_rnn_do, 'layers': ['fc1'],  'seqlen':6,
+       'epochs': 50,  'batch_size': 128,  'stop_after':5}
+       
+r = keras_utils.cv (data, target, groups, models.cnn3adam_filter, rnn, name='rnn_extracted',
+                         epochs=epochs, folds=5,batch_size=batch_size, counter=counter,
+                         plot=True, stop_after=10, balanced=True)
 #
-#with open('results_rnn_extracted.pkl', 'wb') as f:
+#with open('results_rnn_extracted_balanced_ss.pkl', 'wb') as f:
 #            pickle.dump(r, f)
-##
-
-#%%   RAW data test
-r = dict()
-batch_size = 256
-#feats_seq, target_seq, group_seq = [data, target, groups]
-r['pure_rrn_do_6_balanced'] = cv(feats_seq, target_seq, group_seq, models.pure_rnn_do,
-                                name=str(6),epochs=300, folds=5, batch_size=batch_size, 
-                                counter=counter, plot=True, stop_after=15, balanced=True)
-with open('feat_rnn_balanced.pkl', 'wb') as f:
-            pickle.dump(r, f)

@@ -31,7 +31,7 @@ pkl = pickle.load(open('.\\results\\results_electrodes.pkl', 'rb'))
 target = ['W', 'S1', 'S2', 'SWS', 'REM']
 for key in pkl:
     confmat = [x[4] for x in pkl[key]]
-    plt.close('all')
+#    plt.close('all')
     tools.plot_confusion_matrix ('asdelectrodes_'+ key + '.png',np.mean(confmat,0), target,figsize=fsize, perc=True,cmap=cmap)
 
 

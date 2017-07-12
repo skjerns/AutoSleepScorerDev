@@ -14,6 +14,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
+from multiprocessing import Pool
 #import pyfftw
 from scipy import fft
 from scipy import stats
@@ -320,16 +321,35 @@ def feat_emgmedianfreq(signals):
     return np.median(abs(signals),axis=1)
 
 
-def get_features(data):
+def get_all_features(data):
     """
     returns a vector with extraced features
     :param data: datapoints x samples x dimensions (dimensions: EEG,EOG,EMG)
     """
-#    assert(ndims=3)
-    for i in np.arange(data.shape[2]):
-        
-        pass
-    
+    eeg = feat_eeg(data[:,:,0])
+    eog = feat_eog(data[:,:,1])
+    emg = feat_emg(data[:,:,2])
+    return np.hstack([eeg,eog,emg])
+
+
+def get_all_features_m(data):
+    """
+    returns a vector with extraced features
+    :param data: datapoints x samples x dimensions (dimensions: EEG,EOG,EMG)
+    """
+    p = Pool(3)
+    t1 = p.apply_async(feat_eeg,(data[:,:,0],))
+    t2 = p.apply_async(feat_eog,(data[:,:,1],))
+    t3 = p.apply_async(feat_emg,(data[:,:,2],))
+    eeg = t1.get(timeout = 1200)
+    eog = t2.get(timeout = 1200)
+    emg = t3.get(timeout = 1200)
+    p.close()
+    p.join()
+
+    return np.hstack([eeg,eog,emg])
+
+
 def save_results(save_dict=None, **kwargs):
     np.set_printoptions(precision=2,threshold=np.nan)
     if save_dict==None:
@@ -384,7 +404,7 @@ def plot_confusion_matrix(fname, conf_mat, target_names,
     cm = 100* cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 
     df = pd.DataFrame(data=np.sqrt(cm), columns=c_names, index=r_names)
-    plt.figure(figsize=figsize)
+    if fname != '':plt.figure(figsize=figsize)
     g  = sns.heatmap(df, annot = cm if perc else conf_mat , fmt=".1f" if perc else ".0f",
                      linewidths=.5, vmin=0, vmax=np.sqrt(100), cmap=cmap)    
     g.set_title(title)
@@ -394,7 +414,8 @@ def plot_confusion_matrix(fname, conf_mat, target_names,
     g.set_ylabel('True sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
     g.set_xlabel('Predicted sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
     plt.tight_layout()
-    g.figure.savefig(os.path.join('plots', fname))
+    if fname!='':
+        g.figure.savefig(os.path.join('plots', fname))
 
 
 def plot_difference_matrix(fname, confmat1, confmat2, target_names,

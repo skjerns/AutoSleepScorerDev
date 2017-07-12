@@ -11,7 +11,7 @@ matplotlib.use('Agg')
 
 import keras
 import tools
-import pickle
+import dill as pickle
 import scipy
 import models
 import numpy as np
@@ -89,14 +89,14 @@ print(comment)
 
 
 ##%% 
-epochs = 2000
+epochs = 2
 batch_size = 500
 #val_batch_size = 30000
 #
 #result['feat_eeg'] = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=0, plot=True)
 #result['feat_eog'] = cv(np.hstack([feats_eeg,feats_eog]), target, groups, models.ann, name = 'eeg+eog', stop_after=100)  
 #result['feat_emg'] = cv(np.hstack([feats_eeg,feats_emg]), target, groups, models.ann, name = 'eeg+emg', stop_after=100) 
-#result['feat_all_balanced'] = keras_utils.cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann, balanced=True, name = 'all', stop_after=25) 
+r = cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann,epochs=epochs, balanced=True, name = 'all', stop_after=25) 
 #
 #with open('results_electrodes.pkl', 'wb') as f:
 #            pickle.dump(result, f)
@@ -115,17 +115,20 @@ batch_size = 500
 
 #%% weighting test
 
-r = dict()
+r = pickle.load('results_balanced.pkl')
 batch_size = 256
-r['cnn3_balanced'] = cv(data, target, groups, models.cnn3adam_filter,
-                                name='balanced',epochs=300, folds=5, batch_size=batch_size, 
-                                counter=counter, plot=True, stop_after=15, balanced=True)
-r['cnn3_balanced_l2'] = cv(data, target, groups, models.cnn3adam_filter_l2,
-                                name='balanced_l2',epochs=300, folds=5, batch_size=batch_size, 
-                                counter=counter, plot=True, stop_after=15, balanced=True)
-r['cnn3_l2'] = cv(data, target, groups, models.cnn3adam_filter_l2,
-                                name='l2',epochs=300, folds=5, batch_size=batch_size, 
-                                counter=counter, plot=True, stop_after=15)
+r['cnn3_balanced_ss'] = keras_utils.cv_rnn(data, target, groups, models.cnn3adam_filter,
+                                name='balanced', epochs=50, folds=5, batch_size=batch_size, 
+                                counter=counter, plot=True, stop_after=15, balanced=True, cropsize=2700)
+#r['cnn3_balanced'] = cv(data, target, groups, models.cnn3adam_filter,
+#                                name='balanced',epochs=300, folds=5, batch_size=batch_size, 
+#                                counter=counter, plot=True, stop_after=15, balanced=True)
+#r['cnn3_balanced_l2'] = cv(data, target, groups, models.cnn3adam_filter_l2,
+#                                name='balanced_l2',epochs=300, folds=5, batch_size=batch_size, 
+#                                counter=counter, plot=True, stop_after=15, balanced=True)
+#r['cnn3_l2'] = cv(data, target, groups, models.cnn3adam_filter_l2,
+#                                name='l2',epochs=300, folds=5, batch_size=batch_size, 
+#                                counter=counter, plot=True, stop_after=15)
 #pickle.dump(r, open('results_weighted.pkl', 'wb'))
 #r['cnn3_2logweighted'] = cv(data, target, groups, models.cnn3adam_filter,
 #                                name='weighted',epochs=300, folds=5, batch_size=batch_size, 
@@ -135,7 +138,7 @@ r['cnn3_l2'] = cv(data, target, groups, models.cnn3adam_filter_l2,
 #r['cnn3_1not_weighted'] = cv(data, target, groups, models.cnn3adam_filter,
 #                                name='not weighted',epochs=300, folds=5, batch_size=batch_size, 
 #                                counter=counter, plot=True, stop_after=15, weighted=False, log=False)
-pickle.dump(r, open('results_balanced.pkl', 'wb'))
+pickle.dump(r, open('results_balanced_ss2.pkl', 'wb'))
 
 
 

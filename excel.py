@@ -11,7 +11,7 @@ import pandas as pd
 import re
 import time
 from tools import plot_confusion_matrix
-stop
+
 
 #%%
 def natural_key(string_):
@@ -71,6 +71,24 @@ for exp in res:
         scores.append(fold[i])
     all_scores.append(scores)
 s4 = np.vstack(all_scores).T
+
+copypasta = []
+copypasta.extend([float(i) for i in s1])
+copypasta.append([])
+copypasta.append([])
+copypasta.append([])
+copypasta.extend([float(i) for i in s2])
+copypasta.append([])
+copypasta.append([])
+copypasta.append([])
+copypasta.extend([float(i) for i in s3])
+copypasta.append([])
+copypasta.append([])
+copypasta.append([])
+copypasta.extend([float(i) for i in s4])
+copypasta.append([])
+copypasta.append([])
+copypasta.append([])
 
 
 stop
