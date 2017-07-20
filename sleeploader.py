@@ -21,15 +21,8 @@ def natural_key(string_):
          
 
 class SleepDataset(object):
-    loaded = False
-    shuffle_index = list()
-    subjects = list()
-    channels   = {'EEG': False,
-                  'EOG': False,
-                  'EMG': False}    
-    references = {'RefEEG': False,
-                  'RefEOG': False,
-                  'RefEMG': False}
+
+
 
     def __init__(self, directory):
         """
@@ -37,12 +30,18 @@ class SleepDataset(object):
         """
         self.resample = False
         self.available_channels = []
-        if self.loaded == True:
-            print("Data already loaded.")
-        else:
-            self.data = list()
-            self.hypno = list()  
+        self.data = list()
+        self.hypno = list()  
         self.directory = directory
+        self.loaded = False
+        self.shuffle_index = list()
+        self.subjects = list()
+        self.channels   = {'EEG': False,
+                  'EOG': False,
+                  'EMG': False}    
+        self.references = {'RefEEG': False,
+                  'RefEOG': False,
+                  'RefEMG': False}
     
     
     def check_for_normalization(self, data_header):
@@ -169,7 +168,6 @@ class SleepDataset(object):
         """
         channels = [c.upper() for c in channels]
         def infer_eeg(channels):
-            print('Infering EEG Channel... ', end= '')
             # Infer EEG
             ch = False
             ref = False
@@ -195,11 +193,10 @@ class SleepDataset(object):
                         ch = c; break
                     if 'EEG' in c: 
                         ch = c; break
-            print(' {}, Ref: {}'.format(ch, ref))
+            self._print('Infering EEG Channel... {}, Ref: {}'.format(ch, ref))
             return ch, ref
     
         def infer_eog(channels):
-            print('Infering EOG Channel... ', end= '')
             ch = False
             ref = False
             if 'EOG' in channels:
@@ -215,11 +212,10 @@ class SleepDataset(object):
                     if 'EOG' in c or 'EYE' in c: 
                         ch = c
                         break
-            print(' {}, Ref: {}'.format(ch, ref))
+            self._print('Infering EOG Channel... {}, Ref: {}'.format(ch, ref))
             return ch, ref
         
         def infer_emg(channels):
-            print('Infering EMG Channel... ', end= '')
             ch = False
             ref = False
             if 'EMG' in channels:
@@ -233,7 +229,7 @@ class SleepDataset(object):
                     if 'EMG' in c: 
                         ch = c
                         break
-            print(' {}, Ref: {}'.format(ch, ref))
+            self._print('Infering EMG Channel... {}, Ref: {}'.format(ch, ref))
             return ch, ref
         
         if ch_type.upper() == 'EEG':   return infer_eeg(channels)
@@ -253,7 +249,6 @@ class SleepDataset(object):
         filename = os.path.basename(header.filenames[0])
         labels = []
         picks = []
-        
         for ch in self.channels:
             if self.channels[ch] not in channels:
                 raise ValueError('ERROR: Channel {} for {} not found in {}\navailable channels: {}'.format(self.channels[ch], ch, filename, channels))
@@ -267,7 +262,6 @@ class SleepDataset(object):
             else:
                 picks.append(channels.index(self.references[ch]))
                 labels.append(ch)
-#        print('check, channel ', picks, labels)
         return (picks, labels)
     
     
@@ -297,21 +291,26 @@ class SleepDataset(object):
             cPickle.dump((self.hypno,self.hypno_files),f,2)
         
     
-    def load_object(self, filename = 'sleepdata.dat', path = None):
+    def load_object(self, filename = 'sleepdata.pkl', path = None):
         """
         saves the entire state of the SleepData object
         """
+        if not filename [-4:] == '.pkl': filename = filename + '.pkl'
         if path == None: path = self.directory
+        print('Loading data from {}'.format(filename))
+
         with open(os.path.join(path, filename), 'rb') as f:
             tmp_dict = cPickle.load(f, fix_imports=True, encoding='latin1' )
         self.__dict__.update(tmp_dict)
 
 
-    def save_object(self, filename = 'sleepdata.dat', path = None):
+    def save_object(self, filename = 'sleepdata.pkl', path = None):
         """
         restores a previously stored SleepData object
         """
+        if not filename [-4:] == '.pkl': filename = filename + '.pkl'
         if path == None: path = self.directory
+        print('Saving data at {}'.format(filename))
         with open(os.path.join(path, filename), 'wb') as f:
             cPickle.dump(self.__dict__,f,2)
     
@@ -324,6 +323,10 @@ class SleepDataset(object):
             
     def _progress(self, description):
         self.tqdmloop.set_description(description + ' ' * (10-len(description)))
+        self.tqdmloop.refresh()
+        
+    def _print(self, statement, end = '\n'):
+        self.tqdmloop.write(str(statement))
         self.tqdmloop.refresh()
 
 
@@ -376,7 +379,7 @@ class SleepDataset(object):
                 emg =emg[0,:]
                 self.sfreq = 100
             else:
-                print ('Not resampling')
+                self._print ('Not resampling')
         self._progress('Loading')
         signal = np.stack([eeg,eog,emg]).swapaxes(0,1)
         hypno_len = len(hypno)
@@ -506,9 +509,9 @@ class SleepDataset(object):
             for i in self.tqdmloop:
                 eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_len, resampling, pool=p)
                 if(len(eeg) != len(curr_hypno) * self.samples_per_epoch):
-                    print('WARNING: EEG epochs and Hypno epochs have different length {}:{}.'.format(len(eeg),len(curr_hypno)* self.samples_per_epoch))
+                    self._print('WARNING: EEG epochs and Hypno epochs have different length {}:{}.'.format(len(eeg),len(curr_hypno)* self.samples_per_epoch))
                     if len(eeg) > len(curr_hypno) * self.samples_per_epoch:
-                        print('Truncating EEG')
+                        self._print('Truncating EEG')
                         eeg = eeg[:len(curr_hypno) * self.samples_per_epoch]
                 self.data.append(eeg)
                 self.hypno.append(curr_hypno)
