@@ -16,7 +16,7 @@ import models
 import pickle
 import keras_utils
 from keras_utils import cv
-if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
+import sleeploader
 import matplotlib; matplotlib.rcParams['figure.figsize'] = (10, 3)
 np.random.seed(42)
 
@@ -32,12 +32,12 @@ with open('count', 'w') as f:
 
 #%%
 if os.name == 'posix':
-    datadir  = '../'
+    datadir  = '.'
 
 else:
-    datadir = 'c:\\sleep\\data\\'
-#    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
-    datadir = 'd:\\sleep\\corrupted\\'
+#    datadir = 'c:\\sleep\\data\\'
+#    datadir = 'd:\\sleep\\vinc\\'
+    datadir = 'c:\\sleep\\cshs50\\'
 
 def load_data(tsinalis=False):
     global sleep
@@ -46,7 +46,9 @@ def load_data(tsinalis=False):
     if 'data' in vars():  
         del data; 
         gc.collect()
-    if not sleep.loaded: sleep.load_object()
+    sleep.load()
+#    sleep.save_object()
+#    sleep.load_object()
 
     data, target, groups = sleep.get_all_data(groups=True)
 
@@ -124,19 +126,21 @@ print("starting at")
 #            pickle.dump(r, f)
 #%%
 #
-batch_size = 128
-epochs = 50
+batch_size = 256
+epochs = 75
+name = 'rnn new sleeploader'
 #
 #
 #gc.collect()
 ##
 ###
 rnn = {'model':models.pure_rnn_do, 'layers': ['fc1'],  'seqlen':6,
-       'epochs': 50,  'batch_size': 128,  'stop_after':5}
-       
-r = keras_utils.cv (data, target, groups, models.cnn3adam_filter, rnn, name='rnn_extracted',
+       'epochs': 55,  'batch_size': 512,  'stop_after':5, 'balanced':False}
+print(rnn)
+model = 'C:/Users/Simon/dropbox/Uni/Masterthesis/AutoSleepScorer/weights/1116new sleeploadercnn3adam_filter'
+r = keras_utils.cv (data, target, groups, model, rnn, name=name,
                          epochs=epochs, folds=5,batch_size=batch_size, counter=counter,
-                         plot=True, stop_after=10, balanced=True)
+                         plot=True, stop_after=20, balanced=False, cropsize=2700)
 #
-#with open('results_rnn_extracted_balanced_ss.pkl', 'wb') as f:
-#            pickle.dump(r, f)
+with open('results_new_sleeploader_rnn_{}.pkl'.format(name), 'wb') as f:
+            pickle.dump(r, f)

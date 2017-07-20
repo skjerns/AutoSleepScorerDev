@@ -18,7 +18,7 @@ from multiprocessing import Pool
 #import pyfftw
 from scipy import fft
 from scipy import stats
-from scipy.signal import resample
+from scipy.signal import butter, lfilter
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.utils import shuffle
 import json
@@ -44,7 +44,7 @@ def plot_signal(data1,data2):
                 self.ax.cla()
                 self.ax.plot(self.data1[self.pos,:,0])
                 self.ax.plot(self.data2[self.pos,:,0])
-                self.ax.set_ylim([-500,500])
+                self.ax.set_ylim([-1000,1000])
                 plt.title(self.pos)
                 self.fig.canvas.draw()
                 
@@ -477,8 +477,18 @@ def epoch_voting(Y, chunk_size):
     return Y_new
 
         
-
-    
+def butter_bandpass(lowcut, highpass, fs, order=4):
+       nyq = 0.5 * fs
+#       low = lowcut / nyq
+       high = highpass / nyq
+       b, a = butter(order, high, btype='highpass')
+       return b, a
+   
+def butter_bandpass_filter(data, highpass, fs, order=4):
+       b, a = butter_bandpass(0, highpass, fs, order=order)
+       y = lfilter(b, a, data)
+       return y
+   
     
 def get_freqs (signals, nbins=0):
     """ extracts relative fft frequencies and bins them in n bins
@@ -501,95 +511,7 @@ def get_freqs (signals, nbins=0):
     return feats
 
 
-def trim_channels(data, channels):
-        print(data.ch_names)
-    #    channels dict should look like this:
-    #            channels = dict({'EOG' :'EOG',
-    #                    'VEOG':'EOG',
-    #                    'HEOG':'EOG',
-    #                    'EMG' :'EMG',
-    #                    'EEG' :'EEG',
-    #                    'C3'  :'EEG',
-    #                    'C4'  :'EEG'})
-    
-        curr_ch = data.ch_names
-        to_drop = list(curr_ch)
-        # find EMG, take first
-        for ch in curr_ch:
-            if ch in channels.keys():
-                if channels[ch] == 'EMG': 
-                    to_drop.remove(ch)
-                    data.rename_channels(dict({ch:'EMG'}))
-                    break
-    #            
-        # find EOG, take first
-        for ch in curr_ch:
-            if ch in channels.keys():
-                if channels[ch] == 'EOG': 
-                    to_drop.remove(ch)
-                    data.rename_channels(dict({ch:'EOG'}))
-                    break
-        # find EEG, take first
-        for ch in curr_ch:
-            if ch in channels.keys():
-                if channels[ch] == 'EEG': 
-                    to_drop.remove(ch)
-                    data.rename_channels(dict({ch:'EEG'}))
-                    break       
-        data.drop_channels(to_drop)
-        
-        
-def load_eeg_header(filename, dataformat = '', **kwargs):            # CHECK include kwargs
-        dataformats = dict({
-                            #'bin' :'artemis123',
-                            '???' :'bti',                                           # CHECK
-                            'cnt' :'cnt',
-                            'ds'  :'ctf',
-                            'edf' :'edf',
-                            'rec' :'edf',
-                            'bdf' :'edf',
-                            'sqd' :'kit',
-                            'data':'nicolet',
-                            'set' :'eeglab',
-                            'vhdr':'brainvision',
-                            'egi' :'egi',
-                            'fif':'fif',
-                            'gz':'fif',
-                            })
-        if dataformat == '' :      # try to guess format by extension 
-            ext = os.path.splitext(filename)[1][1:].strip().lower()                
-            dataformat = dataformats[ext]
-            
-        if dataformat == 'artemis123':
-            data = mne.io.read_raw_artemis123(filename, **kwargs)             # CHECK if now in stable release
-        elif dataformat == 'bti':
-            data = mne.io.read_raw_bti(filename, **kwargs)
-        elif dataformat == 'cnt':
-            data = mne.io.read_raw_cnt(filename, **kwargs)
-        elif dataformat == 'ctf':
-            data = mne.io.read_raw_ctf(filename, **kwargs)
-        elif dataformat == 'edf':
-            data = mne.io.read_raw_edf(filename, **kwargs)
-        elif dataformat == 'kit':
-            data = mne.io.read_raw_kit(filename, **kwargs)
-        elif dataformat == 'nicolet':
-            data = mne.io.read_raw_nicolet(filename, **kwargs)
-        elif dataformat == 'eeglab':
-            data = mne.io.read_raw_eeglab(filename, **kwargs)
-        elif dataformat == 'brainvision':                                            # CHECK NoOptionError: No option 'markerfile' in section: 'Common Infos' 
-            data = mne.io.read_raw_brainvision(filename, **kwargs)
-        elif dataformat == 'egi':
-            data = mne.io.read_raw_egi(filename, **kwargs)
-        elif dataformat == 'fif':
-            data = mne.io.read_raw_fif(filename, **kwargs)
-        else: 
-            print(['Failed extension not recognized for file: ', filename])           # CHECK throw error here    
-          
-        if not 'verbose' in  kwargs: print('loaded header ' + filename);
-        
-        return data       
-
-print ('loaded tools.py')
+#print ('loaded tools.py')
     
 
     

@@ -10,35 +10,36 @@ import numpy as np
 import seaborn as sns
 import re
 import tools
-
-#%%
 cmap = sns.cubehelix_palette(8, start=2.8, rot=-.1, as_cmap=True)
 fsize = (4,3.2)
+
+#%%
+
 pkl = pickle.load(open('.\\results\\results_rnn_extracted.pkl', 'rb'))
-target = ['W', 'S1', 'S2', 'SWS', 'REM']
+t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
 for key in pkl:
     confmat = [x[4] for x in pkl[key]]
     plt.close('all')
-    tools.plot_confusion_matrix ('recurrent_'+ key + '.png',np.mean(confmat,0), target,figsize=fsize, perc=True, cmap=cmap, title=key)
+    tools.plot_confusion_matrix ('recurrent_'+ key + '.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title=key)
 
 pkl = pickle.load(open('.\\results\\results_recurrent_seqlen-rnn6.pkl', 'rb'))
 pkl['feat-LSTM'] = pkl.pop('pure_rnn_do_6')
 confmat = [x[4] for x in pkl[list(pkl.keys())[0]]]
-tools.plot_confusion_matrix ('recurrent_feat6.png',np.mean(confmat,0), target,figsize=fsize, perc=True, cmap=cmap, title='Feat-LSTM')
+tools.plot_confusion_matrix ('recurrent_feat6.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='Feat-LSTM')
 
 
-pkl = pickle.load(open('.\\results\\results_electrodes.pkl', 'rb'))
-target = ['W', 'S1', 'S2', 'SWS', 'REM']
+pkl = pickle.load(open('.\\1098_cnn3adam_filter_SS_cnnnobal_results.pkl', 'rb'))
+t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
 for key in pkl:
     confmat = [x[4] for x in pkl[key]]
 #    plt.close('all')
-    tools.plot_confusion_matrix ('asdelectrodes_'+ key + '.png',np.mean(confmat,0), target,figsize=fsize, perc=True,cmap=cmap)
+    tools.plot_confusion_matrix ('cnn_new_data'+ key + '.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True,cmap=cmap)
 
 
 #%% Differenceplot
 
 pkl = pickle.load(open('.\\results\\results_electrodes.pkl', 'rb'))
-target = ['W', 'S1', 'S2', 'SWS', 'REM']
+t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
 
 cnn_eeg = np.mean([x[4] for x in pkl['cnn_eeg_morefilter']], 0)
 cnn_eog = np.mean([x[4] for x in pkl['cnn_eog_morefilter']], 0)
@@ -50,19 +51,19 @@ ann_eog = np.mean([x[4] for x in pkl['feat_eog']], 0)
 ann_emg = np.mean([x[4] for x in pkl['feat_emg']], 0)
 ann_all = np.mean([x[4] for x in pkl['feat_all']], 0)
 
-tools.plot_difference_matrix('cnn-all-vs-eeg.png', cnn_all, cnn_eeg, target,figsize=fsize, perc=True, title='CNN all minus EEG')
-tools.plot_difference_matrix('cnn-all-vs-eog.png', cnn_all, cnn_eog, target,figsize=fsize, perc=True, title='CNN all minus EEG+EOG')
-tools.plot_difference_matrix('cnn-all-vs-emg.png', cnn_all, cnn_emg, target,figsize=fsize, perc=True, title='CNN all minus EEG+EMG')
+tools.plot_difference_matrix('cnn-all-vs-eeg.png', cnn_all, cnn_eeg, t_label,figsize=fsize, perc=True, title='CNN all minus EEG')
+tools.plot_difference_matrix('cnn-all-vs-eog.png', cnn_all, cnn_eog, t_label,figsize=fsize, perc=True, title='CNN all minus EEG+EOG')
+tools.plot_difference_matrix('cnn-all-vs-emg.png', cnn_all, cnn_emg, t_label,figsize=fsize, perc=True, title='CNN all minus EEG+EMG')
 
-tools.plot_difference_matrix('ann-all-vs-eeg.png', ann_all, ann_eeg, target,figsize=fsize, perc=True, title='feat-ANN all minus EEG')
-tools.plot_difference_matrix('ann-all-vs-eog.png', ann_all, ann_eog, target,figsize=fsize, perc=True, title='feat-ANN all minus EEG+EOG')
-tools.plot_difference_matrix('ann-all-vs-emg.png', ann_all, ann_emg, target,figsize=fsize, perc=True, title='feat-ANN all minus EEG+EMG')
+tools.plot_difference_matrix('ann-all-vs-eeg.png', ann_all, ann_eeg, t_label,figsize=fsize, perc=True, title='feat-ANN all minus EEG')
+tools.plot_difference_matrix('ann-all-vs-eog.png', ann_all, ann_eog, t_label,figsize=fsize, perc=True, title='feat-ANN all minus EEG+EOG')
+tools.plot_difference_matrix('ann-all-vs-emg.png', ann_all, ann_emg, t_label,figsize=fsize, perc=True, title='feat-ANN all minus EEG+EMG')
 
 pkl1 = pickle.load(open('.\\results\\results_recurrent_seqlen-rnn6.pkl', 'rb'))
 pkl2 = pickle.load(open('.\\results\\results_rnn_extracted.pkl', 'rb'))
 rec_ann = np.mean([x[4] for x in pkl1['pure_rrn_do_6']], 0)
 rec_cnn = np.mean([x[4] for x in pkl2['rnn_extracted_-3']], 0)
-tools.plot_difference_matrix('rec-ann-vs-cnn.png', rec_ann, rec_cnn, target,figsize=fsize, perc=True, title='feat-LSTM minus CNN+LSTM')
+tools.plot_difference_matrix('rec-ann-vs-cnn.png', rec_ann, rec_cnn, t_label,figsize=fsize, perc=True, title='feat-LSTM minus CNN+LSTM')
 
 plt.close('all')
 

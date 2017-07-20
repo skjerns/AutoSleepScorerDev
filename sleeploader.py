@@ -3,10 +3,14 @@ import os
 import re
 import numpy as np
 import numpy.random as random
-import tools
+from tools import shuffle, butter_bandpass_filter
+from multiprocessing import Pool
 from scipy.signal import resample
 import csv
-import _pickle as cPickle
+from tqdm import trange
+from copy import deepcopy
+import time
+import pickle as cPickle
 #import pickle as cPickle
 #import cPickle
 import mne
@@ -20,50 +24,50 @@ class SleepDataset(object):
     loaded = False
     shuffle_index = list()
     subjects = list()
-    channels = dict({'EOG' :'EOG',
-                 'EOGmix':'EOG',
-                'VEOG':'EOG',
-                'HEOG':'EOG',
-                'RightEye':'EOG',
-                'EMG' :'EMG',
-                'EEG' :'EEG',
-                'C3'  :'EEG',
-                'C3A2'  :'EEG',
-                'C4'  :'EEG',
-                'C3A2':'EEG',
-                'EEG1':'EEG',
-                'EEG2':'EEG',
-                'EMG1':'EMG',
-                'LOC' :'EOG'})
+    channels   = {'EEG': False,
+                  'EOG': False,
+                  'EMG': False}    
+    references = {'RefEEG': False,
+                  'RefEOG': False,
+                  'RefEMG': False}
 
     def __init__(self, directory):
         """
         :param directory: a directory string
         """
+        self.resample = False
+        self.available_channels = []
         if self.loaded == True:
             print("Data already loaded.")
         else:
             self.data = list()
             self.hypno = list()  
         self.directory = directory
-            
-        return None
     
     
-    def check_for_normalization(self,data_header):
+    def check_for_normalization(self, data_header):
     
-        if not data_header.info['sfreq'] == 100:
-            print('WARNING: Data not with 100hz. Try resampling')      
-            
-        if not data_header.info['lowpass'] == 50:
-            print('WARNING: lowpass not at 50')
-            
-        if not 'EOG' in data_header.ch_names:
+        channels = [c.upper() for c in data_header.ch_names]
+        if not data_header.info['sfreq'] == 100 and not self.resample:
+            print('WARNING: Data not with 100hz. Use resample=True for resampling')      
+        
+    
+#        if not data_header.info['lowpass'] == 50:
+#            print('WARNING: lowpass not at 50')
+        if not self.channels['EEG'] in channels:
+            print('WARNING: EEG channel missing')            
+        if not self.channels['EOG'] in channels:
             print('WARNING: EOG channel missing')
-        if not 'EMG' in data_header.ch_names:
+        if not self.channels['EMG'] in channels:
             print('WARNING: EMG channel missing')
-        if not 'EEG' in data_header.ch_names:
+
+        if self.references['RefEEG'] and not self.references['RefEEG'] in channels:
             print('WARNING: EEG channel missing')
+        if self.references['RefEOG'] and not self.references['RefEOG'] in channels:
+            print('WARNING: EOG channel missing')
+        if self.references['RefEMG'] and not self.references['RefEMG'] in channels:
+            print('WARNING: EMG channel missing')
+
         
         
     def load_hypnogram(self, filename, dataformat = '', csv_delimiter='\t', mode='standard'):
@@ -73,6 +77,7 @@ class SleepDataset(object):
         :param mode: standard: just read first row, overwrite = if second row!=0,
                      take that value, concatenate = add values together
         """
+        
         dataformats = dict({
                             'txt' :'csv',
                             'csv' :'csv',                                           
@@ -112,7 +117,6 @@ class SleepDataset(object):
                             'cnt' :'cnt',
                             'ds'  :'ctf',
                             'edf' :'edf',
-                            'rec' :'edf',
                             'bdf' :'edf',
                             'sqd' :'kit',
                             'data':'nicolet',
@@ -123,7 +127,7 @@ class SleepDataset(object):
                             'gz':'fif',
                             })
         if dataformat == '' :      # try to guess format by extension 
-            ext = os.path.splitext(filename)[1][1:].strip().lower()                
+            ext = os.path.splitext(filename)[1][1:].strip().lower()  
             dataformat = dataformats[ext]
             
         if dataformat == 'artemis123':
@@ -155,43 +159,116 @@ class SleepDataset(object):
         
         return data
     
+    def infer_channels(self, channels, ch_type = 'all'):
+        """
+        Tries to automatically infer channel names. Very limited functionality.
+        
+        :param channels: a list of channel names
+        :param ch_type: The type of channel that you want to infer (EEG, EMG, EOG or all)
+        :returns: tuple(channel, reference) if one channel, dictionary with mappings if all channels
+        """
+        channels = [c.upper() for c in channels]
+        def infer_eeg(channels):
+            print('Infering EEG Channel... ', end= '')
+            # Infer EEG
+            ch = False
+            ref = False
+            if 'EEG' in channels:
+                ch = 'EEG'
+            elif 'C3' in channels and 'A2' in channels:
+                ch = 'C3'
+                ref = 'A2'
+            elif 'C4' in channels and 'A1' in channels:
+                ch = 'C4'
+                ref = 'A1'   
+            elif 'FPZ' in channels and 'CZ' in channels:
+                ch = 'FPZ'
+                ref = 'CZ'
+            elif 'PZ' in channels and 'OZ' in channels:
+                ch = 'PZ'
+                ref = 'OZ'
+            else:
+                for c in channels:
+                    if 'C4' in c and 'A1' in c:  
+                        ch = c; break
+                    if 'C3' in c and 'A2' in c:  
+                        ch = c; break
+                    if 'EEG' in c: 
+                        ch = c; break
+            print(' {}, Ref: {}'.format(ch, ref))
+            return ch, ref
     
-    def trim_channels(self,data, channels):
-        print(data.ch_names)
-    #    channels dict should look like this:
-    #            channels = dict({'EOG' :'EOG',
-    #                    'VEOG':'EOG',
-    #                    'HEOG':'EOG',
-    #                    'EMG' :'EMG',
-    #                    'EEG' :'EEG',
-    #                    'C3'  :'EEG',
-    #                    'C4'  :'EEG'})
+        def infer_eog(channels):
+            print('Infering EOG Channel... ', end= '')
+            ch = False
+            ref = False
+            if 'EOG' in channels:
+                ch = 'EOG'
+            elif 'LOC' in channels:
+                ch = 'LOC'
+            elif 'ROC' in channels:
+                ch = 'ROC'
+            elif 'EOG horizontal' in channels:
+                ch = 'EOG HORIZONTAL'
+            else:
+                for c in channels:
+                    if 'EOG' in c or 'EYE' in c: 
+                        ch = c
+                        break
+            print(' {}, Ref: {}'.format(ch, ref))
+            return ch, ref
+        
+        def infer_emg(channels):
+            print('Infering EMG Channel... ', end= '')
+            ch = False
+            ref = False
+            if 'EMG' in channels:
+                ch = 'EMG'
+                ref = False
+            elif 'EMG1' in channels and 'EMG2' in channels:
+                ch = 'EMG1'
+                ref = 'EMG2'
+            else:
+                for c in channels:
+                    if 'EMG' in c: 
+                        ch = c
+                        break
+            print(' {}, Ref: {}'.format(ch, ref))
+            return ch, ref
+        
+        if ch_type.upper() == 'EEG':   return infer_eeg(channels)
+        if ch_type.upper() == 'EOG':   return infer_eog(channels)
+        if ch_type.upper() == 'EMG':   return infer_emg(channels)
+        if ch_type.lower() == 'all':
+            eeg, refeeg = infer_eeg(channels)
+            eog, refeog = infer_eog(channels)
+            emg, refemg = infer_emg(channels)
+            return ({'EEG':eeg, 'EMG':emg, 'EOG':eog}, 
+                   {'RefEEG': refeeg, 'RefEOG':refeog, 'RefEMG': refemg})
+        raise Exception('Infer_channels: Wrong channel type selected: {}'.format(ch_type))
     
-        curr_ch = data.ch_names
-        to_drop = list(curr_ch)
-        # find EMG, take first
-        for ch in curr_ch:
-            if ch in channels.keys():
-                if channels[ch] == 'EMG': 
-                    to_drop.remove(ch)
-                    data.rename_channels(dict({ch:'EMG'}))
-                    break
-    #            
-        # find EOG, take first
-        for ch in curr_ch:
-            if ch in channels.keys():
-                if channels[ch] == 'EOG': 
-                    to_drop.remove(ch)
-                    data.rename_channels(dict({ch:'EOG'}))
-                    break
-        # find EEG, take first
-        for ch in curr_ch:
-            if ch in channels.keys():
-                if channels[ch] == 'EEG': 
-                    to_drop.remove(ch)
-                    data.rename_channels(dict({ch:'EEG'}))
-                    break       
-        data.drop_channels(to_drop)
+    
+    def check_channels(self, header):
+        channels = [c.upper() for c in header.ch_names]
+        filename = os.path.basename(header.filenames[0])
+        labels = []
+        picks = []
+        
+        for ch in self.channels:
+            if self.channels[ch] not in channels:
+                raise ValueError('ERROR: Channel {} for {} not found in {}\navailable channels: {}'.format(self.channels[ch], ch, filename, channels))
+            else:
+                picks.append(channels.index(self.channels[ch]))
+                labels.append(ch)
+        for ch in self.references:
+            if not self.references[ch]:continue
+            if self.references[ch] not in channels:
+                raise ValueError('ERROR: Channel {} for {} not found in {}\navailable channels: {}'.format(self.references[ch], ch, filename, channels))
+            else:
+                picks.append(channels.index(self.references[ch]))
+                labels.append(ch)
+#        print('check, channel ', picks, labels)
+        return (picks, labels)
     
     
     def load_hypnopickle(self, filename, path = None):
@@ -244,47 +321,80 @@ class SleepDataset(object):
         for f in files:
             hypno  = self.load_hypnogram(os.path.join(self.directory + f), mode = 'overwrite')
             self.hypno.append(hypno)
+            
+    def _progress(self, description):
+        self.tqdmloop.set_description(description + ' ' * (10-len(description)))
+        self.tqdmloop.refresh()
 
 
-    def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000, resampling = True):
+    def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000, resampling = True, mode = 'standard', pool=False):
         """
         :param filename: loads the given eeg file
+        :param mode: mode fro loading hypno-file
         """
-        
-        hypno  = self.load_hypnogram(self.directory + hypno_file, mode = 'standard')
-        header = self.load_eeg_header(self.directory + eeg_file, verbose='WARNING', preload=True)
-        self.trim_channels(header, self.channels)
+        self._progress('Loading')
+        if not pool: pool = Pool(3)
+        self.resample = resampling
+        hypno  = self.load_hypnogram(os.path.join(self.directory, hypno_file), mode = mode)
+        header = self.load_eeg_header(os.path.join(self.directory, eeg_file), verbose='WARNING', preload=True)
+        if self.channels['EEG'] == False: self.channels['EEG'], self.references['RefEEG'] = self.infer_channels(header.ch_names, 'EEG')
+        if self.channels['EOG'] == False: self.channels['EOG'], self.references['RefEOG'] = self.infer_channels(header.ch_names, 'EOG')
+        if self.channels['EMG'] == False: self.channels['EMG'], self.references['RefEMG'] = self.infer_channels(header.ch_names, 'EMG')
+        self.available_channels = header.ch_names
+        self.sfreq = np.round(header.info['sfreq'])
         self.check_for_normalization(header)
+
+        picks, labels = self.check_channels(header)
+        data,_ = deepcopy(header[picks, :])
+#        print('setup: ', self.channels, self.references)
+        eeg = data[labels.index('EEG'),:]
+        if self.references['RefEEG']:
+            eeg = eeg - data[labels.index('RefEEG'),:]
+        eog = data[labels.index('EOG'),:]
+        if self.references['RefEOG']:
+            eog = eog - data[labels.index('RefEOG'),:]
+        emg = data[labels.index('EMG'),:]
+        if self.references['RefEMG']: 
+            emg = emg - data[labels.index('RefEMG'),:]     
+        self._progress('Filtering' )
+        eeg = butter_bandpass_filter(eeg, 0.15, self.sfreq)
+        eog = butter_bandpass_filter(eog, 0.15, self.sfreq)
+        emg = butter_bandpass_filter(emg, 10.0, self.sfreq)
+        # Resampling
         
-        mne.set_log_level(verbose=False)  # to get rid of the annoying 'convert to float64'
-        eeg = np.array(header.to_data_frame().reindex_axis(['EEG','EOG','EMG'],axis=1), dtype=self.dtype)
-        mne.set_log_level(verbose=True)
-        
-        self.sfreq     = header.info['sfreq']
-        if not header.info['sfreq'] == 100:
+        if not np.isclose(self.sfreq, 100):
             if resampling == True:
-                print ('Resampling data from {}hz to 100hz'.format(int(self.sfreq)))
-                eeg = resample(eeg, int(len(eeg)/int(np.round(self.sfreq))*100))
-                self.sfreq = 100.0 
+                self._progress('Resampling' )
+                res_eeg = pool.apply_async(mne.io.RawArray(np.stack([eeg]), mne.create_info(1, self.sfreq, 'eeg'), verbose=0).resample, args = (100.,))
+                res_eog = pool.apply_async(mne.io.RawArray(np.stack([eog]), mne.create_info(1, self.sfreq, 'eeg'), verbose=0).resample, args = (100.,))
+                res_emg = pool.apply_async(mne.io.RawArray(np.stack([emg]), mne.create_info(1, self.sfreq, 'eeg'), verbose=0).resample, args = (100.,))
+                eeg,_ = res_eeg.get(timeout=30)[0,:]
+                eog,_ = res_eog.get(timeout=30)[0,:]
+                emg,_ = res_emg.get(timeout=30)[0,:]
+                eeg =eeg[0,:]
+                eog =eog[0,:]
+                emg =emg[0,:]
+                self.sfreq = 100
             else:
                 print ('Not resampling')
-        
+        self._progress('Loading')
+        signal = np.stack([eeg,eog,emg]).swapaxes(0,1)
         hypno_len = len(hypno)
-        eeg_len   = len(eeg)
+        eeg_len   = len(signal)
+#        print('length: hypno {} eeg {}'.format(hypno_len, eeg_len))
         epoch_len = int(eeg_len / hypno_len / self.sfreq) 
-        self.samples_per_epoch = int(epoch_len * self.sfreq)
+        self.samples_per_epoch = int(epoch_len * self.sfreq) 
+        signal = signal[:(len(signal)//self.samples_per_epoch)*self.samples_per_epoch]     # remove left over to ensure len(data)%3000==0
         
-
-        eeg = eeg[:(len(eeg)//self.samples_per_epoch)*self.samples_per_epoch]     # remove left over to ensure len(data)%3000==0
-        return eeg, hypno
+        return signal.astype(self.dtype), hypno
         
         
     def shuffle_data(self):
         """
         Shuffle subjects that are loaded. Returns None
         """
-        if self.loaded == False: print('ERROR: Data not loaded yet')
-        self.data, self.hypno, self.shuffle_index, self.subjects = tools.shuffle(self.data, self.hypno, self.shuffle_index, self.subjects, random_state=self.rng)
+        if self.loaded == False: print('ERROR: Data not yet loaded')
+        self.data, self.hypno, self.shuffle_index, self.subjects = shuffle(self.data, self.hypno, self.shuffle_index, self.subjects, random_state=self.rng)
         return None
         
         
@@ -310,62 +420,6 @@ class SleepDataset(object):
             return self.data, self.hypno
         
         
-        
-    def get_intrasub(self, splits=3, test=1 ):  
-        train_data = list()
-        train_target = list()
-        test_data = list()
-        test_target = list()
-        hypno_repeat = self.samples_per_epoch / self.chunk_len
-        
-        for eeg, hypno in zip(self.data, self.hypno):
-            per_split = len(eeg)/self.chunk_len/splits
-            choice = self.rng.permutation(splits)
-            tst = choice[0:test]  
-            trn = choice[test:]
-            for i in trn:
-                train_data.append(eeg.reshape([-1, self.chunk_len,3])[per_split*i:(per_split*(i+1))])
-                train_target.append(np.repeat(hypno, hypno_repeat)[per_split*i:(per_split*(i+1))])
-            for i in tst:
-                test_data.append(eeg.reshape([-1, self.chunk_len,3])[per_split*i:(per_split*(i+1))])
-                test_target.append(np.repeat(hypno, hypno_repeat)[per_split*i:(per_split*(i+1))])
-        return np.vstack(train_data), np.hstack(train_target), np.vstack(test_data), np.hstack(test_target)
-    
-    
-        
-    def get_train(self, split=30, flat=True):
-        """
-        :param split: int 0-100, split ratio used for test set
-        :param flat: select if data will be returned in a flat list or a list per subject
-        """
-    
-        if self.loaded == False: print('ERROR: Data not loaded yet')
-            
-        end = int(len(self.data)-len(self.data)*(split/100.0))
-        
-        if flat == True:
-            return  self._makeflat(end=end)
-        else:
-            return self.data[:end], self.hypno[:end]
-            
-        
-        
-    def get_test(self, split=30, flat=True):
-        """
-        :param split: int 0-100, split ratio used for test set
-        :param flat: select if data will be returned in a flat list or a list per subject
-        """
-        
-        if self.loaded == False: print('ERROR: Data not loaded yet')
-            
-        start = int(len(self.data)-len(self.data)*(split/100.0))
-        
-        if flat == True:
-             return  self._makeflat(start=start)
-        else:
-            return self.data[start:], self.hypno[start:]
-        
-        
     def _makeflat(self, start=None, end=None, groups = False):     
         eeg = list()
         for sub in self.data[start:end]:
@@ -389,14 +443,20 @@ class SleepDataset(object):
             return np.vstack(eeg), np.hstack(hypno)
        
         
-    def load(self, sel = [], shuffle = False,  force_reload = False, resampling =True, flat = None, chunk_len = 3000, dtype=np.float32):
+    def load(self, sel = [], channels = None, references = None, resampling = True, chunk_len = 3000, 
+             flat = None, force_reload = False, shuffle = False, dtype=np.float32):
         """
         :param sel:          np.array with indices of files to load from the directory. Natural sorting.
+        :param channels:     dict with form 'EEG':'channel_name', which channel to use for which modality (EEG,EOG,EMG). If none, will try to infer automatically
+        :param reference:    dict with form 'EEG':'channel_name', which channel to use as reference. If None, no rereferencing will be applied
         :param shuffle:      shuffle subjects or not
         :param force_reload: reload data even if already loaded
         :param flat:         select if data will be returned in a flat array or a list per subject
+        :param flat:         select if data will be returned in a flat array or a list per subject
         """
-        
+        if channels is not None: self.channels = channels
+        if references is not None: self.references = references
+
         self.chunk_len = chunk_len        
         if self.loaded == True and force_reload == False and np.array_equal(sel, self.selection)==True:
             print('Getting Dataset')
@@ -427,7 +487,7 @@ class SleepDataset(object):
         self.hypno_files = sorted(self.hypno_files, key = natural_key)
 
         # check eeg_filenames
-        self.eeg_files = [s for s in os.listdir(self.directory) if s.endswith(('.vhdr','rec','edf'))]
+        self.eeg_files = [s for s in os.listdir(self.directory) if s.endswith(('.vhdr', 'edf'))]
         self.eeg_files = sorted(self.eeg_files, key = natural_key)
         
         if len(self.hypno_files)  != len(self.eeg_files): 
@@ -441,13 +501,18 @@ class SleepDataset(object):
         self.subjects = zip(self.eeg_files,self.hypno_files)
 
         # load EEG and adapt Hypno files
-        for i in range(len(self.eeg_files)):
-            eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_len, resampling)
-            if(len(eeg) != len(curr_hypno) * self.samples_per_epoch):
-                print('WARNING: EEG epochs and Hypno epochs have different length {}:{}'.format(len(eeg),len(curr_hypno)* self.samples_per_epoch))
-            self.data.append(eeg)
-            self.hypno.append(curr_hypno)
-            
+        self.tqdmloop = trange(len(self.eeg_files), desc='Loading data')
+        with Pool(3) as p:
+            for i in self.tqdmloop:
+                eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_len, resampling, pool=p)
+                if(len(eeg) != len(curr_hypno) * self.samples_per_epoch):
+                    print('WARNING: EEG epochs and Hypno epochs have different length {}:{}.'.format(len(eeg),len(curr_hypno)* self.samples_per_epoch))
+                    if len(eeg) > len(curr_hypno) * self.samples_per_epoch:
+                        print('Truncating EEG')
+                        eeg = eeg[:len(curr_hypno) * self.samples_per_epoch]
+                self.data.append(eeg)
+                self.hypno.append(curr_hypno)
+        self.tqdmloop = None    
         self.loaded = True
         
         # shuffle if wanted
@@ -460,7 +525,7 @@ class SleepDataset(object):
         elif flat == False:
             return self.data,self.hypno
             
-print('loaded sleeploader.py')
+#print('loaded sleeploader.py', __name__)
 
 
 

@@ -13,12 +13,12 @@ import time
 from tools import plot_confusion_matrix
 
 
-#%%
+
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]   
-def x():
-    time.sleep(1)
+
+#%%
 
 #l=a['feat_eeg']
 #val_acc = [y[0] for y in [x for x in l]]
@@ -29,7 +29,7 @@ def x():
 #val = np.vstack([val_acc, val_f1]).T
 #test = np.vstack([test_acc, test_f1]).T
 
-a   = pickle.load(open('.\\results\\results_electrodes.pkl','rb'))
+a   = pickle.load(open('.\\results_SS_crop_cnnBal_rnn_Nobal.pkl','rb'))
 names = sorted(a.keys(), key=natural_key)
 res = [[a[key]] for key in names]
 
@@ -73,22 +73,22 @@ for exp in res:
 s4 = np.vstack(all_scores).T
 
 copypasta = []
-copypasta.extend([float(i) for i in s1])
-copypasta.append([])
-copypasta.append([])
-copypasta.append([])
-copypasta.extend([float(i) for i in s2])
-copypasta.append([])
-copypasta.append([])
-copypasta.append([])
-copypasta.extend([float(i) for i in s3])
-copypasta.append([])
-copypasta.append([])
-copypasta.append([])
-copypasta.extend([float(i) for i in s4])
-copypasta.append([])
-copypasta.append([])
-copypasta.append([])
+copypasta.extend(['\t'.join([str(x) for x in i]) for i in s1])
+copypasta.append('')
+copypasta.append('')
+copypasta.append('')
+copypasta.extend(['\t'.join([str(x) for x in i]) for i in s2])
+copypasta.append('')
+copypasta.append('')
+copypasta.append('')
+copypasta.extend(['\t'.join([str(x) for x in i]) for i in s3])
+copypasta.append('')
+copypasta.append('')
+copypasta.append('')
+copypasta.extend(['\t'.join([str(x) for x in i]) for i in s4])
+copypasta.append('')
+copypasta.append('')
+copypasta.append('')
 
 
 stop
