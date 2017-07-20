@@ -295,13 +295,18 @@ class SleepDataset(object):
         """
         saves the entire state of the SleepData object
         """
+        
         if not filename [-4:] == '.pkl': filename = filename + '.pkl'
         if path == None: path = self.directory
-        print('Loading data from {}'.format(filename))
-
-        with open(os.path.join(path, filename), 'rb') as f:
-            tmp_dict = cPickle.load(f, fix_imports=True, encoding='latin1' )
+        try:
+            print('Loading data from {}'.format(filename))
+            with open(os.path.join(path, filename), 'rb') as f:
+                tmp_dict = cPickle.load(f, fix_imports=True, encoding='latin1' )
+        except FileNotFoundError:
+            print('Sleepdata file {} not found'.format(filename))
+            return False
         self.__dict__.update(tmp_dict)
+        return True
 
 
     def save_object(self, filename = 'sleepdata.pkl', path = None):
@@ -313,6 +318,7 @@ class SleepDataset(object):
         print('Saving data at {}'.format(filename))
         with open(os.path.join(path, filename), 'wb') as f:
             cPickle.dump(self.__dict__,f,2)
+            
     
     def load_hypno_(self, files):
         self.hypno = []
@@ -320,6 +326,7 @@ class SleepDataset(object):
         for f in files:
             hypno  = self.load_hypnogram(os.path.join(self.directory + f), mode = 'overwrite')
             self.hypno.append(hypno)
+            
             
     def _progress(self, description):
         self.tqdmloop.set_description(description + ' ' * (10-len(description)))

@@ -268,11 +268,11 @@ def feat_eog(signals):
     feats[:,3] = beta  /sum_abs_pow
     feats[:,4] = gamma /sum_abs_pow
     feats[:,5] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5) #smean
-    feats[:,6] = np.max(signals, axis=1)    #PAV
-    feats[:,7] = np.min(signals, axis=1)    #VAV   
+    feats[:,6] = np.sqrt(np.max(signals, axis=1))    #PAV
+    feats[:,7] = np.sqrt(np.min(signals, axis=1))    #VAV   
     feats[:,8] = np.argmax(signals, axis=1)/nsamp #PAP
     feats[:,9] = np.argmin(signals, axis=1)/nsamp #VAP
-    feats[:,10] = np.sum(np.abs(signals), axis=1)/ np.mean(np.sum(np.abs(signals), axis=1)) # AUC
+    feats[:,10] = np.sqrt(np.sum(np.abs(signals), axis=1)/ np.mean(np.sum(np.abs(signals), axis=1))) # AUC
     feats[:,11] = np.sum(((np.roll(np.sign(signals), 1,axis=1) - np.sign(signals)) != 0).astype(int),axis=1)/nsamp #TVC
     feats[:,12] = np.log10(np.std(signals, axis=1)) #STD/VAR
     feats[:,13] = np.log10(stats.kurtosis(signals,fisher=False,axis=1))       # kurtosis
@@ -304,8 +304,8 @@ def feat_emg(signals):
     feats[:,5] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5) #smean
     emg = np.sum(np.abs(w[:,np.arange(12.5*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)
     feats[:,6] = emg / np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)  # ratio of high freq to total motor
-    feats[:,7] = np.median(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    # median freq
-    feats[:,8] = np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    #  mean freq
+    feats[:,7] = np.log(np.median(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1))    # median freq
+    feats[:,8] = np.log(np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1))   #  mean freq
     feats[:,9] = np.std(signals, axis=1)    #  std 
     feats[:,10] = np.mean(signals,axis=1)
     feats[:,11] = np.log10(stats.kurtosis(signals,fisher=False,axis=1) )

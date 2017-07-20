@@ -86,12 +86,21 @@ def make_parallel(model, gpu_count=-1):
     
     
 
-def get_activations(model, data, layername, batch_size=128, flatten=True, cropsize=0):
+def get_activations(model, data, layer, batch_size=256, flatten=True, cropsize=0):
 #    get_layer_output = K.function([model.layers[0].input, K.learning_phase()],
 #                                      [model.layers[layername].output if type(layername) is type(int) else model.get_layer(layername).output])
 #    
+
+    if type(layer) is str:
+        layerindex = None
+        layername  = layer
+    else:
+        layerindex = layer
+        layername  = None   
+    
     get_layer_output = K.function([model.layers[0].input, K.learning_phase()],
-                                      [model.get_layer(layername).output])
+                                  [model.get_layer(name=layername, index=layerindex).output])
+
     activations = []
     batch_size = int(batch_size)
     for i in tqdm(range(int(np.ceil(len(data)/batch_size))), desc='Feature extraction'):
@@ -118,22 +127,27 @@ def test_data_cnn(data, target, model):
     return cnn_acc, cnn_f1, confmat
 
 
-def test_data_cnn_rnn(data, target, cnn, layername, rnn):
+def test_data_cnn_rnn(data, target, cnn, layername, rnn, cropsize=0):
     """
     take two ready trained models (cnn+rnn)
     test on input data and return acc+f1
     """
-    
+    if target.ndim==2: target = np.argmax(target,1)
+    if cropsize != 0: 
+        diff = (data.shape[1] - cropsize)//2
+        data = data[:,diff:-diff:,:]
     features = get_activations(cnn, data, layername)
-    cnn_acc = accuracy_score(np.argmax(target,1),np.argmax(features,1))
-    cnn_f1  = f1_score(np.argmax(target,1),np.argmax(features,1), average='macro')
+    cnn_pred = get_activations(cnn, data, -1)
+
+    cnn_acc = accuracy_score(target,np.argmax(cnn_pred,1))
+    cnn_f1  = f1_score(target,np.argmax(cnn_pred,1), average='macro')
     
     seqlen = rnn.input_shape[1]
     features_seq, target_seq = tools.to_sequences(features, target, seqlen=seqlen)
-    results = np.argmax(get_activations(rnn, features_seq, -1), 1)
+    results = get_activations(rnn, features_seq, -1)
     
-    rnn_acc = accuracy_score(np.argmax(target_seq,1),np.argmax(results,1))
-    rnn_f1  = f1_score(np.argmax(target_seq,1),np.argmax(results,1), average='macro')
+    rnn_acc = accuracy_score(target_seq,np.argmax(results,1))
+    rnn_f1  = f1_score(target_seq,np.argmax(results,1), average='macro')
     return cnn_acc, cnn_f1, rnn_acc, rnn_f1
 
 
@@ -338,14 +352,14 @@ class generator_balanced(object):
                 self.idx[label] = []
             else:
                 number = self.n_per_class if label!=self.slabel else self.n_per_class
-                indexes      = np.random.choice(np.arange(idx.size), int(number*0.8 if (label==3 or label==2) else number), replace = False)
+                indexes      = np.random.choice(np.arange(idx.size), int(number*0.8 if (label=='' or label=='') else number), replace = False)
                 choice = idx[indexes]
                 x_batch.extend([self.X[i] for i in choice])
                 y_batch.extend([self.Y[i] for i in choice])
                 self.idx[label] = np.delete (self.idx[label], indexes)
                 self.p[label]   = np.delete (self.p[label], indexes)
                 self.p[label]   = self.p[label] / np.sum(self.p[label])
-                if label == 3 or label == 2:
+                if label == '' or label == '':
                     idx = self.idx[label]
                     indexes_hard    = np.random.choice(np.arange(idx.size), int(number*0.2), p=self.p[label], replace = False)
                     choice = idx[indexes_hard]
@@ -443,9 +457,14 @@ class generator(object):
     def next_normal(self):
         x_batch = self.X[self.step*self.batch_size:(self.step+1)*self.batch_size]
         y_batch = self.Y[self.step*self.batch_size:(self.step+1)*self.batch_size]
-        diff = (len(x_batch[0]) - self.cropsize)//2
-        if self.cropsize !=0:
-            x_batch = [x[diff:diff+self.cropsize] for i,x in enumerate(x_batch)]
+        
+        diff = len(x_batch[0]) - self.cropsize
+        if self.cropsize!=0 and not self.val:
+            start = np.random.choice(np.arange(0,diff+5,5), len(x_batch))
+            x_batch = [x[start[i]:start[i]+self.cropsize,:] for i,x in enumerate(x_batch)]
+        elif self.cropsize !=0 and self.val:
+            x_batch = [x[diff//2:diff//2+self.cropsize] for i,x in enumerate(x_batch)]
+            
         x_batch = np.array(x_batch, dtype=np.float32)
         y_batch = np.array(y_batch, dtype=np.int32)
         self.step+=1
@@ -630,11 +649,10 @@ def test_model(data, targets, groups, testdata, modfun, epochs=250, batch_size=5
        val_batch_size=0, stop_after=0, name='', counter=0, plot = True):
     """
     Train a model on the data
-    
     :param ...: should be self-explanatory
-
     :returns results: (best_val_acc, best_val_f1, best_test_acc, best_test_f1)
     """
+    
     return
 #%%
 
