@@ -21,6 +21,7 @@ from scipy import stats
 from scipy.signal import butter, lfilter
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.utils import shuffle
+from sklearn.metrics import f1_score, accuracy_score
 import json
 import os
 import re
@@ -390,8 +391,8 @@ def append_json(json_filename, dic):
         f.write('\n')    
 
 
-def plot_confusion_matrix(fname, conf_mat, target_names,
-                          title='', cmap='Blues', perc=True,figsize=(6,5)):
+def plot_confusion_matrix(fname, conf_mat, target_names, 
+                          title='', cmap='Blues', perc=True,figsize=(6,5),cbar=True):
     """Plot Confusion Matrix."""
     c_names = []
     r_names = []
@@ -406,20 +407,21 @@ def plot_confusion_matrix(fname, conf_mat, target_names,
     df = pd.DataFrame(data=np.sqrt(cm), columns=c_names, index=r_names)
     if fname != '':plt.figure(figsize=figsize)
     g  = sns.heatmap(df, annot = cm if perc else conf_mat , fmt=".1f" if perc else ".0f",
-                     linewidths=.5, vmin=0, vmax=np.sqrt(100), cmap=cmap)    
+                     linewidths=.5, vmin=0, vmax=np.sqrt(100), cmap=cmap, cbar=cbar)    
     g.set_title(title)
-    cbar = g.collections[0].colorbar
-    cbar.set_ticks(np.sqrt(np.arange(0,100,20)))
-    cbar.set_ticklabels(np.arange(0,100,20))
+    if cbar:
+        cbar = g.collections[0].colorbar
+        cbar.set_ticks(np.sqrt(np.arange(0,100,20)))
+        cbar.set_ticklabels(np.arange(0,100,20))
     g.set_ylabel('True sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
     g.set_xlabel('Predicted sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
-    plt.tight_layout()
+#    plt.tight_layout()
     if fname!='':
         g.figure.savefig(os.path.join('plots', fname))
 
 
-def plot_difference_matrix(fname, confmat1, confmat2, target_names,
-                          title='', cmap='Blues', perc=True,figsize=(5,4)):
+def plot_difference_matrix(fname, confmat1, confmat2, target_names, 
+                          title='', cmap='Blues', perc=True,figsize=(5,4),**kwargs):
     """Plot Confusion Matrix."""
 
     
@@ -434,7 +436,7 @@ def plot_difference_matrix(fname, confmat1, confmat2, target_names,
     plt.figure(figsize=figsize)
     g  = sns.heatmap(df, annot=cm, fmt=".1f" ,
                      linewidths=.5, vmin=-10, vmax=10, 
-                     cmap='coolwarm_r')#sns.diverging_palette(20, 220, as_cmap=True))    
+                     cmap='coolwarm_r',**kwargs)#sns.diverging_palette(20, 220, as_cmap=True))    
     g.set_title(title)
     g.set_ylabel('True sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
     g.set_xlabel('Predicted sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
@@ -443,6 +445,31 @@ def plot_difference_matrix(fname, confmat1, confmat2, target_names,
     g.figure.savefig(os.path.join('plots', fname))
 
 
+def plot_results_per_patient(predictions, targets, groups, title='Results per Patient', fname='results_pp.png'):
+    assert len(predictions) ==  len(targets), '{} predictions, {} targets'.format(len(predictions), len(targets))
+    IDs = np.unique(groups)
+    f1s = []
+    accs = []
+    if predictions.ndim == 2: predictions = np.argmax(predictions,1)
+    if targets.ndim == 2: targets = np.argmax(targets,1)
+    for ID in IDs:
+        y_true = targets [groups==ID]
+        y_pred = predictions[groups==ID]
+        f1  = f1_score(y_true, y_pred, average='macro')
+        acc = accuracy_score(y_true, y_pred)
+        f1s.append(f1)
+        accs.append(acc)
+    if fname != '':plt.figure()
+    plt.plot(f1s,'go')
+    plt.plot(accs,'bo')
+    plt.legend(['F1', 'Acc'])
+    plt.xlabel('Patient')
+    plt.ylabel('Score')
+    if fname is not '':
+        title = title + '\nMean Acc: {:.1f} mean F1: {:.1f}'.format(accuracy_score(targets, predictions)*100,f1_score(targets,predictions, average='macro')*100)
+    plt.title(title)
+    if fname!='':
+        plt.savefig(os.path.join('plots', fname))
 
 def memory():
     from wmi import WMI
@@ -464,7 +491,7 @@ def shuffle_lists(*args,**options):
      """
      return shuffle(*args,**options)
     
-    
+
 def epoch_voting(Y, chunk_size):
     
     

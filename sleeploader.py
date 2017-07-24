@@ -5,7 +5,7 @@ import numpy as np
 import numpy.random as random
 from tools import shuffle, butter_bandpass_filter
 from multiprocessing import Pool
-from scipy.signal import resample
+from scipy.ndimage.filters import minimum_filter1d
 import csv
 from tqdm import trange
 from copy import deepcopy
@@ -36,6 +36,8 @@ class SleepDataset(object):
         self.loaded = False
         self.shuffle_index = list()
         self.subjects = list()
+        self.tqdmloop = False
+        self.printed_channels = False
         self.channels   = {'EEG': False,
                   'EOG': False,
                   'EMG': False}    
@@ -166,7 +168,12 @@ class SleepDataset(object):
         :param ch_type: The type of channel that you want to infer (EEG, EMG, EOG or all)
         :returns: tuple(channel, reference) if one channel, dictionary with mappings if all channels
         """
+        if not self.printed_channels :
+            self._print('Available channels: ' + str(channels))
+            self.printed_channels = True
+            
         channels = [c.upper() for c in channels]
+        
         def infer_eeg(channels):
             # Infer EEG
             ch = False
@@ -333,8 +340,11 @@ class SleepDataset(object):
         self.tqdmloop.refresh()
         
     def _print(self, statement, end = '\n'):
-        self.tqdmloop.write(str(statement))
-        self.tqdmloop.refresh()
+        if self.tqdmloop:
+            self.tqdmloop.write(str(statement))
+            self.tqdmloop.refresh()
+        else:
+            print(statement, end=end)
 
 
     def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000, resampling = True, mode = 'standard', pool=False):
@@ -398,11 +408,27 @@ class SleepDataset(object):
         
         return signal.astype(self.dtype), hypno
         
+    def check_data(self):
+        """
+        checks if data is in good shape
+        1. Checks if there are missing segments (signal == 0 for whole epoch)
+        2. Checks if the labels are all there (TODO)
+        """
+        for i, subject  in enumerate(self.data):
+            epochs      = subject.reshape([-1, self.chunk_len, subject.shape[-1]])
+            iszero      = np.isclose(epochs, 0, atol=0.0005)
+            epochs_zero = np.mean(iszero, axis=1)
+            epochs_zero = np.max(epochs_zero,1)
+            if np.any(epochs_zero == 1):
+                where = np.where(epochs_zero==1)[0]
+                print('WARNING: Missing data in {} epoch{} ({:.1f}%) of subject {} (file: {})/n'.format(len(where), 's' if len(where)>1 else '',np.mean(epochs_zero)*100,i, self.eeg_files[i]))
+            
         
     def shuffle_data(self):
         """
         Shuffle subjects that are loaded. Returns None
         """
+        print('DEPRECATED: Please do not shuffle inside the sleeploader')
         if self.loaded == False: print('ERROR: Data not yet loaded')
         self.data, self.hypno, self.shuffle_index, self.subjects = shuffle(self.data, self.hypno, self.shuffle_index, self.subjects, random_state=self.rng)
         return None
@@ -522,7 +548,7 @@ class SleepDataset(object):
                         eeg = eeg[:len(curr_hypno) * self.samples_per_epoch]
                 self.data.append(eeg)
                 self.hypno.append(curr_hypno)
-        self.tqdmloop = None    
+        self.tqdmloop = False    
         self.loaded = True
         
         # shuffle if wanted

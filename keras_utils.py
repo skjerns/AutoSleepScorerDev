@@ -16,6 +16,11 @@ from tqdm import tqdm
 from keras.layers.core import Lambda
 from sklearn.utils import class_weight
 #%%
+print('##################################################')
+print('##################################################')
+print(__name__)
+print('##################################################')
+print('##################################################')
 
 def get_available_gpus():
     """
@@ -127,8 +132,9 @@ def test_data_cnn(data, target, model):
     return cnn_acc, cnn_f1, confmat
 
 
-def test_data_cnn_rnn(data, target, cnn, layername, rnn, cropsize=0):
+def test_data_cnn_rnn(data, target, cnn, layername, rnn, cropsize=0, mode = 'scores'):
     """
+    mode = 'scores' or 'preds'
     take two ready trained models (cnn+rnn)
     test on input data and return acc+f1
     """
@@ -148,7 +154,10 @@ def test_data_cnn_rnn(data, target, cnn, layername, rnn, cropsize=0):
     
     rnn_acc = accuracy_score(target_seq,np.argmax(results,1))
     rnn_f1  = f1_score(target_seq,np.argmax(results,1), average='macro')
-    return cnn_acc, cnn_f1, rnn_acc, rnn_f1
+    if mode=='scores':
+        return (cnn_acc, cnn_f1, rnn_acc, rnn_f1)
+    elif mode=='preds':
+        return (cnn_pred,results, target, target_seq)
 
 
 #%%
@@ -159,7 +168,7 @@ class Checkpoint_balanced(keras.callbacks.Callback):
     Implements early stopping if no improvement on validation data for X epochs
     """
     def __init__(self,val_gen, bal_gen=None, train_gen=None, counter = 0, verbose=0, 
-                 epochs_to_stop=15, plot = False, name = ''):
+                 groups = False, epochs_to_stop=15, plot = False, name = ''):
         super(Checkpoint_balanced, self).__init__()
         
         assert (bal_gen is None) == (train_gen is None), 'Must give train generator if balanced generator is present'
@@ -167,6 +176,7 @@ class Checkpoint_balanced(keras.callbacks.Callback):
         self.bgen = bal_gen
         self.tgen = train_gen
         self.gen = val_gen
+        self.groups = groups
         self.nclasses = val_gen.Y.shape[-1]
         self.best_weights = None
         self.verbose = verbose
@@ -194,7 +204,7 @@ class Checkpoint_balanced(keras.callbacks.Callback):
         self.best_acc = 0
         self.best_epoch = 0
         if self.plot: 
-            self.figures.append(plt.figure(figsize=(10,8)))
+            self.figures.append(plt.figure(figsize=(15,8)))
         
     def on_epoch_end(self, epoch, logs={}):
         self.gen.reset() # to be sure
@@ -236,6 +246,7 @@ class Checkpoint_balanced(keras.callbacks.Callback):
             self.per_class[i].append(np.mean((y_true[y_true==i])==(y_pred[y_true==i])))
         confmat = confusion_matrix(y_true, y_pred)    
             
+
         if self.plot:
             plt.clf()
             plt.subplot(2,2,1)
@@ -252,12 +263,15 @@ class Checkpoint_balanced(keras.callbacks.Callback):
             plt.xlabel('Epoch')
             plt.ylabel('%')
             plt.title('Best: acc {:.1f}, f1 {:.1f}'.format(self.best_acc*100,self.best_f1*100))
-            plt.subplot(2,2,3)
+            plt.subplot(2,3,4)
             for i in range(self.nclasses):
                 plt.plot(self.per_class[i])
             plt.legend(['W', 'S1', 'S2', 'SWS', 'REM'])
             plt.title('Per class accuracy')
-            plt.subplot(2,2,4)
+            plt.subplot(2,3,5)
+            if self.groups is not False:
+                tools.plot_results_per_patient(y_pred,y_true, self.groups,fname='')
+            plt.subplot(2,3,6)
             tools.plot_confusion_matrix('',confmat,['W', 'S1', 'S2', 'SWS', 'REM'])
             plt.title('Epoch {}'.format(len(self.loss)))
             plt.suptitle(self.name)
@@ -530,10 +544,13 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
         
         train_data   = [data[i] for i in train_idx]
         train_target = targets[train_idx]
+        train_groups = groups[train_idx]
         val_data     = [data[i] for i in val_idx]
         val_target   = targets[val_idx]
+        val_groups   = groups[val_idx]
         test_data    = [data[i] for i in test_idx]       
         test_target  = targets[test_idx]
+        test_groups  = groups[test_idx]
         
         
         if modfun:
@@ -548,13 +565,14 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
         g_train= generator(train_data, train_target, batch_size*2, val=True, cropsize=cropsize)
         g_val  = generator(val_data, val_target, batch_size*2, val=True, cropsize=cropsize)
         g_test = generator(test_data, test_target, batch_size*2, val=True, cropsize=cropsize)
+        
         if balanced:
             g = generator_balanced(train_data, train_target, batch_size,cropsize=cropsize)
-            cb  = Checkpoint_balanced(g_val, g, g_train, verbose=1, counter=counter, 
+            cb  = Checkpoint_balanced(g_val, g, g_train, verbose=1, counter=counter, groups=val_groups,
                  epochs_to_stop=stop_after, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
         else:
             g = generator(train_data, train_target, batch_size, random=True, cropsize=cropsize)
-            cb  = Checkpoint_balanced(g_val, verbose=1, counter=counter, 
+            cb  = Checkpoint_balanced(g_val, verbose=1, counter=counter, groups=val_groups,
                  epochs_to_stop=stop_after, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
         
         if modfun: model.fit_generator(g, g.n_batches, verbose=0, epochs=epochs, callbacks=[cb], max_q_size=1)
@@ -566,6 +584,17 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
         test_acc = accuracy_score(np.argmax(y_true,1),np.argmax(y_pred,1))
         test_f1  = f1_score(np.argmax(y_true,1),np.argmax(y_pred,1), average="macro")
         confmat = confusion_matrix(np.argmax(y_true,1),np.argmax(y_pred,1))
+        if plot:
+            plt.subplot(2,3,5)
+            plt.cla()
+            tools.plot_results_per_patient(y_pred,y_true, test_groups, fname='')
+            plt.title('Test Cases')
+            plt.subplot(2,3,6)
+            plt.cla()
+            tools.plot_confusion_matrix('',confmat,['W', 'S1', 'S2', 'SWS', 'REM'], cbar=False)
+            plt.title('Test conf. Acc: {:.1f} F1: {:.1f}'.format(test_acc*100, test_f1*100))
+            plt.show()
+            plt.pause(0.0001)
         results[name + '_' + modfun.__name__ if modfun else 'cnn'].append([cb.best_acc, cb.best_f1, test_acc, test_f1, confmat])
         
         if modfun: # only save if we calculated the results
@@ -587,9 +616,9 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
                 val_data_extracted   = extracted[len(train_data):len(train_data)+len(val_data)]
                 test_data_extracted  = extracted[len(train_data)+len(val_data):]
                 assert (len(train_data)==len(train_data_extracted)) and (len(test_data)==len(test_data_extracted)) and (len(val_data)==len(val_data_extracted))
-                train_data_seq, train_target_seq = tools.to_sequences(train_data_extracted, train_target, seqlen=seq)
-                val_data_seq, val_target_seq     = tools.to_sequences(val_data_extracted, val_target, seqlen=seq)
-                test_data_seq, test_target_seq   = tools.to_sequences(test_data_extracted, test_target, seqlen=seq)
+                train_data_seq, train_target_seq, train_groups_seq = tools.to_sequences(train_data_extracted, train_target,train_groups, seqlen=seq)
+                val_data_seq, val_target_seq, val_groups_seq       = tools.to_sequences(val_data_extracted,   val_target,  val_groups, seqlen=seq)
+                test_data_seq, test_target_seq, test_groups_seq    = tools.to_sequences(test_data_extracted,  test_target, test_groups, seqlen=seq)
              
                 rnn_shape  = list((np.array(train_data_seq[0])).shape)
                 neurons = int(np.sqrt(rnn_shape[-1])*4)
@@ -601,11 +630,11 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
                 g_train= generator(train_data_seq, train_target_seq, batch_size*2, val=True)
                 if rnn['balanced']:
                     g = generator_balanced(train_data_seq, train_target_seq, rnn_bs)
-                    cb = Checkpoint_balanced(g_val, g, g_train, verbose=1, counter=counter, 
+                    cb = Checkpoint_balanced(g_val, g, g_train, verbose=1, counter=counter, groups = val_groups_seq, 
                          epochs_to_stop=stopafter_rnn, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
                 else:              
                     g = generator(train_data_seq, train_target_seq, rnn_bs)
-                    cb = Checkpoint_balanced(g_val, verbose=1, counter=counter, 
+                    cb = Checkpoint_balanced(g_val, verbose=1, counter=counter, groups = val_groups_seq, 
                          epochs_to_stop=stopafter_rnn, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
                 
                 rnn_model.fit_generator(g, g.n_batches, epochs=rnn_epochs, verbose=0, callbacks=[cb])    
@@ -615,9 +644,20 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
                 val_f1  = cb.best_f1
                 test_acc = accuracy_score(np.argmax(y_true,1),np.argmax(y_pred,1))
                 test_f1  = f1_score(np.argmax(y_true,1),np.argmax(y_pred,1), average="macro")
+                confmat = confusion_matrix(np.argmax(y_true,1),np.argmax(y_pred,1))
                 try: rnn_model.save(os.path.join('.','weights', str(counter)+ name + lname + '_' + str(i) + "_{:.3f}-{:.3f}".format(test_acc,test_f1)))
                 except Exception as error:  print("Got an error while saving model: {}".format(error))
-                confmat = confusion_matrix(np.argmax(y_true,1),np.argmax(y_pred,1))
+                if plot:
+                        plt.subplot(2,3,5)
+                        plt.cla()
+                        tools.plot_results_per_patient(y_pred,y_true, test_groups_seq,fname='')
+                        plt.title('Test Cases')
+                        plt.subplot(2,3,6)
+                        plt.cla()
+                        tools.plot_confusion_matrix('',confmat,['W', 'S1', 'S2', 'SWS', 'REM'], cbar=False)
+                        plt.title('Test conf. Acc: {:.1f} F1: {:.1f}'.format(test_acc*100, test_f1*100))
+                        plt.show()
+                        plt.pause(0.0001)
                 results[name + '_' + lname].append([val_acc, val_f1, test_acc, test_f1, confmat])
                 print('fold {}: val acc/f1: {:.5f}/{:.5f}, test acc/f1: {:.5f}/{:.5f}'.format(i,cb.best_acc, cb.best_f1, test_acc, test_f1))
 

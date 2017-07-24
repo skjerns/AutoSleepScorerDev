@@ -20,6 +20,7 @@ from keras_utils import cv
 if not 'sleeploader' in vars() : import sleeploader  # prevent reloading module
 import matplotlib; matplotlib.rcParams['figure.figsize'] = (10, 3)
 np.random.seed(42)
+
 if __name__ == '__main__':
     try:
         with open('count') as f:
@@ -73,7 +74,7 @@ if __name__ == '__main__':
     feats_eeg = np.load('feats_eeg.npy') # tools.feat_eeg(data[:,:,0])
     feats_eog = np.load('feats_eog.npy') #tools.feat_eog(data[:,:,1])
     feats_emg = np.load('feats_emg.npy') #tools.feat_emg(data[:,:,2])
-    feats = np.hstack([feats_eeg, feats_eog, feats_emg])
+    feats_all = np.hstack([feats_eeg, feats_eog, feats_emg])
     
     # 
     if 'data' in vars():
@@ -82,45 +83,62 @@ if __name__ == '__main__':
     #
     #%%
     print("starting")
-    
-    result = dict()
-    comment = 'testing_electrodes'
+    comment = 'testing_electrodes for feat'
     print(comment)
-    
-    
+
     ##%% 
-    epochs = 2
-    batch_size = 500
-    #val_batch_size = 30000
-    #
-    #result['feat_eeg'] = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=0, plot=True)
-    #result['feat_eog'] = cv(np.hstack([feats_eeg,feats_eog]), target, groups, models.ann, name = 'eeg+eog', stop_after=100)  
-    #result['feat_emg'] = cv(np.hstack([feats_eeg,feats_emg]), target, groups, models.ann, name = 'eeg+emg', stop_after=100) 
-#    r = cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann,epochs=epochs, balanced=True, name = 'all', stop_after=25) 
-    #
+    epochs = 250
+    batch_size = 512
+    results = dict()
+    r = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=25, plot=True)
+    results.update(r)
+    r = cv(np.hstack([feats_eeg,feats_eog]), target, groups, models.ann, name = 'eeg+eog', stop_after=25)  
+    results.update(r)
+    r = cv(np.hstack([feats_eeg,feats_emg]), target, groups, models.ann, name = 'eeg+emg', stop_after=25) 
+    results.update(r)
+    r = cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann,epochs=epochs, name = 'all', stop_after=25) 
+    results.update(r)
+    
     #with open('results_electrodes.pkl', 'wb') as f:
     #            pickle.dump(result, f)
     ###%% 
-    #val_batch_size = 1440
-    #epochs = 250
+    epochs = 250
+    batch_size = 512
     #
-    #result['cnn_eeg_morefilter'] = cv(data[:,:,0:1], target, groups, models.cnn3adam_filter, name = 'eeg', stop_after=25, counter=counter,batch_size=batch_size)
-    #result['cnn_eog_morefilter'] = cv(data[:,:,0:2], target, groups, models.cnn3adam_filter, name = 'eeg+eog', stop_after=25, counter=counter,batch_size=batch_size)  
-    #result['cnn_emg_morefilter'] = cv(data[:,:,[0,2]], target, groups, models.cnn3adam_filter, name = 'eeg+emg', stop_after=25, counter=counter,batch_size=batch_size) 
-    #result['cnn_all_morefilter'] = cv(data[:,:,:], target, groups, models.cnn3adam_filter, name = 'all_morefilter', stop_after=25, counter=counter,batch_size=batch_size) 
+    cropsize = ??
+    r = cv(data[:,:,0:1],   target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'eeg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)
+    results.update(r)
+    r = cv(data[:,:,0:2],   target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'eeg+eog', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)  
+    results.update(r)
+    r = cv(data[:,:,[0,2]], target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'eeg+emg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
+    results.update(r)
+    r = cv(data[:,:,:],     target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'all', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
+    results.update(r)
     #with open('results_electrodes_balanced.pkl', 'wb') as f:
     #            pickle.dump(result, f)
-                
     
     
     #%% weighting test
     
 #    r = pickle.load('results_balanced.pkl')
-    batch_size = 256
-    name = 'new sleeploader'
-    r = keras_utils.cv (data, target, groups, models.cnn3adam_filter, name=name,
+    batch_size = 512
+    name = 'cropped2000'
+    r1 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
+                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
+                         plot=True, stop_after=15, balanced=False, cropsize=2000)
+    name = 'cropped2700'
+    r2 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
                          epochs=50, folds=5,batch_size=batch_size, counter=counter,
                          plot=True, stop_after=15, balanced=False, cropsize=2700)
+    name = 'cropped2900'
+    r3 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
+                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
+                         plot=True, stop_after=15, balanced=False, cropsize=2700)
+    name = 'no cropped'
+    r4 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
+                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
+                         plot=True, stop_after=15, balanced=False, cropsize=0)
+    pickle.dump([r1,r2,r3, r4], open('cropping_results_alldatal2.pkl', 'wb'))
     #r['cnn3_balanced'] = cv(data, target, groups, models.cnn3adam_filter,
     #                                name='balanced',epochs=300, folds=5, batch_size=batch_size, 
     #                                counter=counter, plot=True, stop_after=15, balanced=True)

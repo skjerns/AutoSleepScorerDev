@@ -37,7 +37,9 @@ if __name__ == "__main__":
     else:
     #    datadir = 'c:\\sleep\\data\\'
     #    datadir = 'd:\\sleep\\vinc\\'
+#        datadir = 'c:\\sleep\\emsa\\'
         datadir = 'c:\\sleep\\cshs50\\'
+#
     
     def load_data(tsinalis=False):
         global sleep
@@ -53,9 +55,7 @@ if __name__ == "__main__":
         data, target, groups = sleep.get_all_data(groups=True)
     
         data = scipy.stats.mstats.zscore(data , axis = None)
-        data = data.astype(np.float32)
         target[target==5] = 4
-    
         target[target==8] = 0
         target = keras.utils.to_categorical(target)
         return data, target, groups
@@ -64,12 +64,12 @@ if __name__ == "__main__":
     #%%
     
     print('Extracting features')
-    target = np.load('target.npy')
-    groups = np.load('groups.npy')
-    feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
-    feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,1])
-    feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,2])
-    feats = np.hstack([feats_eeg, feats_eog, feats_emg])
+#    target = np.load('target.npy')
+#    groups = np.load('groups.npy')
+#    feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
+#    feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,1])
+#    feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,2])
+#    feats = np.hstack([feats_eeg, feats_eog, feats_emg])
     # 
     if 'data' in vars():
         if np.sum(np.isnan(data)) or np.sum(np.isnan(data)):print('Warning! NaNs detected')
@@ -129,19 +129,15 @@ if __name__ == "__main__":
     batch_size = 256
     epochs = 75
     name = 'rnn new sleeploader'
-    #
-    #
-    #gc.collect()
-    ##
     ###
     rnn = {'model':models.pure_rnn_do, 'layers': ['fc1'],  'seqlen':6,
            'epochs': 55,  'batch_size': 512,  'stop_after':5, 'balanced':False}
     print(rnn)
     model = 'C:/Users/Simon/dropbox/Uni/Masterthesis/AutoSleepScorer/weights/1116new sleeploadercnn3adam_filter'
-    model = models.cnn3adam_filter
+    model = models.cnn3adam_filter_l2
     r = keras_utils.cv (data, target, groups, model, rnn, name=name,
-                             epochs=epochs, folds=5,batch_size=batch_size, counter=counter,
-                             plot=True, stop_after=20, balanced=True, cropsize=2700)
+                             epochs=epochs, folds=5, batch_size=batch_size, counter=counter,
+                             plot=True, stop_after=15, balanced=False, cropsize=2700)
     #
     with open('results_new_sleeploader_rnn_{}.pkl'.format(name), 'wb') as f:
                 pickle.dump(r, f)
