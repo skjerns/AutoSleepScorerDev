@@ -64,12 +64,12 @@ if __name__ == "__main__":
     #%%
     
     print('Extracting features')
-#    target = np.load('target.npy')
-#    groups = np.load('groups.npy')
-#    feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
-#    feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,1])
-#    feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,2])
-#    feats = np.hstack([feats_eeg, feats_eog, feats_emg])
+    target = np.load('target.npy')
+    groups = np.load('groups.npy')
+    feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
+    feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,1])
+    feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,2])
+    feats_all = np.hstack([feats_eeg, feats_eog, feats_emg])
     # 
     if 'data' in vars():
         if np.sum(np.isnan(data)) or np.sum(np.isnan(data)):print('Warning! NaNs detected')
@@ -100,16 +100,16 @@ if __name__ == "__main__":
     #with open('results_recurrent_seqlen1-15.pkl', 'wb') as f:
     #            pickle.dump(r, f)
     #%%
-    ##%%   seqlen = 6, 5-fold
-    ##r = dict()
-    #batch_size = 512
-    #feats_seq, target_seq, group_seq = tools.to_sequences(feats, target, groups, seqlen = 6, tolist=False)
-    #r = keras_utils.cv(feats_seq, target_seq, group_seq, models.pure_rnn_do,epochs=2, folds=5, batch_size=batch_size, name='test',
-    #                                counter=counter, plot=True, stop_after=15, balanced=True)
-    ##
-    #with open('results_recurrent_seqlen-6-w5.pkl', 'wb') as f:
-    #            pickle.dump(r, f)
-    
+#    %%   seqlen = 6, 5-fold
+    results = dict()
+    batch_size = 512
+    feats_seq, target_seq, group_seq = tools.to_sequences(feats_all, target, groups=groups, seqlen = 6, tolist=False)
+    r = keras_utils.cv(feats_seq, target_seq, group_seq, models.pure_rnn_do, epochs=250, folds=5, batch_size=batch_size, name='RNN',
+                                    counter=counter, plot=True, stop_after=15, balanced=True)
+    results.update(r)
+    with open('results_recurrent', 'wb') as f:
+                pickle.dump(results, f)
+#    
     
     #%%   seqlen = 6, 5-fold mit past
     #r = dict()
@@ -127,17 +127,17 @@ if __name__ == "__main__":
     #%%
     #
     batch_size = 256
-    epochs = 75
-    name = 'rnn new sleeploader'
+    epochs = 250
+    name = 'CNN+LSTM'
     ###
     rnn = {'model':models.pure_rnn_do, 'layers': ['fc1'],  'seqlen':6,
-           'epochs': 55,  'batch_size': 512,  'stop_after':5, 'balanced':False}
+           'epochs': 250,  'batch_size': 512,  'stop_after':15, 'balanced':False}
     print(rnn)
-    model = 'C:/Users/Simon/dropbox/Uni/Masterthesis/AutoSleepScorer/weights/1116new sleeploadercnn3adam_filter'
+#    model = 'C:\\Users\\Simon\\dropbox\\Uni\\Masterthesis\\AutoSleepScorer\\weights\\balanced'
     model = models.cnn3adam_filter_l2
     r = keras_utils.cv (data, target, groups, model, rnn, name=name,
                              epochs=epochs, folds=5, batch_size=batch_size, counter=counter,
-                             plot=True, stop_after=15, balanced=False, cropsize=2700)
-    #
-    with open('results_new_sleeploader_rnn_{}.pkl'.format(name), 'wb') as f:
-                pickle.dump(r, f)
+                             plot=False, stop_after=15, balanced=False, cropsize=2800)
+    results.rupdate(r)
+    with open('results_recurrent', 'wb') as f:
+                pickle.dump(results, f)

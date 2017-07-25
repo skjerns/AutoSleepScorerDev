@@ -127,6 +127,7 @@ class SleepDataset(object):
                             'fif':'fif',
                             'gz':'fif',
                             })
+        kwargs['stim_channel'] = None
         if dataformat == '' :      # try to guess format by extension 
             ext = os.path.splitext(filename)[1][1:].strip().lower()  
             dataformat = dataformats[ext]

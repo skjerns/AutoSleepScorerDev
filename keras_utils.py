@@ -102,6 +102,7 @@ def get_activations(model, data, layer, batch_size=256, flatten=True, cropsize=0
     else:
         layerindex = layer
         layername  = None   
+    print (layername, layerindex)
     
     get_layer_output = K.function([model.layers[0].input, K.learning_phase()],
                                   [model.get_layer(name=layername, index=layerindex).output])
@@ -205,7 +206,7 @@ class Checkpoint_balanced(keras.callbacks.Callback):
         self.best_epoch = 0
         if self.plot: 
             self.figures.append(plt.figure(figsize=(15,8)))
-        
+            
     def on_epoch_end(self, epoch, logs={}):
         self.gen.reset() # to be sure
         if self.balanced:
@@ -366,16 +367,16 @@ class generator_balanced(object):
                 self.idx[label] = []
             else:
                 number = self.n_per_class if label!=self.slabel else self.n_per_class
-                indexes      = np.random.choice(np.arange(idx.size), int(number*0.8 if (label=='' or label=='') else number), replace = False)
+                indexes      = np.random.choice(np.arange(idx.size), int(number*0.9 if (label in [0,2,3,4]) else number), replace = False)
                 choice = idx[indexes]
                 x_batch.extend([self.X[i] for i in choice])
                 y_batch.extend([self.Y[i] for i in choice])
                 self.idx[label] = np.delete (self.idx[label], indexes)
                 self.p[label]   = np.delete (self.p[label], indexes)
                 self.p[label]   = self.p[label] / np.sum(self.p[label])
-                if label == '' or label == '':
+                if label in [0,2,3,4]:
                     idx = self.idx[label]
-                    indexes_hard    = np.random.choice(np.arange(idx.size), int(number*0.2), p=self.p[label], replace = False)
+                    indexes_hard    = np.random.choice(np.arange(idx.size), int(number*0.1), p=self.p[label], replace = False)
                     choice = idx[indexes_hard]
                     x_batch.extend([self.X[i] for i in choice])
                     y_batch.extend([self.Y[i] for i in choice])
@@ -527,7 +528,8 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
         modfun = False
 
     gcv = GroupKFold(folds)
-    results    = {name + '_' + modfun.__name__ if modfun else 'cnn':[]}
+    dict_id    = modfun.__name__ if modfun else 'cnn' + '_' + name
+    results    = {dict_id:[]}
     if rnn:
         for lname in rnn['layers']:
             results[name + '_' + lname] = []
@@ -595,7 +597,7 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
             plt.title('Test conf. Acc: {:.1f} F1: {:.1f}'.format(test_acc*100, test_f1*100))
             plt.show()
             plt.pause(0.0001)
-        results[name + '_' + modfun.__name__ if modfun else 'cnn'].append([cb.best_acc, cb.best_f1, test_acc, test_f1, confmat])
+        results[dict_id].append([cb.best_acc, cb.best_f1, test_acc, test_f1, confmat])
         
         if modfun: # only save if we calculated the results
             try: model.save(os.path.join('.','weights', str(counter) + name + model.name + '_' + str(i) + "_{:.3f}-{:.3f}".format(test_acc,test_f1)))
@@ -616,9 +618,9 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
                 val_data_extracted   = extracted[len(train_data):len(train_data)+len(val_data)]
                 test_data_extracted  = extracted[len(train_data)+len(val_data):]
                 assert (len(train_data)==len(train_data_extracted)) and (len(test_data)==len(test_data_extracted)) and (len(val_data)==len(val_data_extracted))
-                train_data_seq, train_target_seq, train_groups_seq = tools.to_sequences(train_data_extracted, train_target,train_groups, seqlen=seq)
-                val_data_seq, val_target_seq, val_groups_seq       = tools.to_sequences(val_data_extracted,   val_target,  val_groups, seqlen=seq)
-                test_data_seq, test_target_seq, test_groups_seq    = tools.to_sequences(test_data_extracted,  test_target, test_groups, seqlen=seq)
+                train_data_seq, train_target_seq, train_groups_seq = tools.to_sequences(train_data_extracted, train_target,groups=train_groups, seqlen=seq)
+                val_data_seq, val_target_seq, val_groups_seq       = tools.to_sequences(val_data_extracted,   val_target,  groups=val_groups, seqlen=seq)
+                test_data_seq, test_target_seq, test_groups_seq    = tools.to_sequences(test_data_extracted,  test_target, groups=test_groups, seqlen=seq)
              
                 rnn_shape  = list((np.array(train_data_seq[0])).shape)
                 neurons = int(np.sqrt(rnn_shape[-1])*4)
@@ -676,7 +678,7 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
         
         
         try:
-            with open('{}_{}_{}_results.pkl'.format(counter,modelname,name), 'wb') as f:
+            with open('{}_{}_results.pkl'.format(counter, dict_id), 'wb') as f:
                 pickle.dump(results, f)
         except Exception as e:
             print("Error while saving results: ", e)

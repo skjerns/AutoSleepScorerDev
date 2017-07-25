@@ -33,7 +33,7 @@ t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
 for key in pkl:
     confmat = [x[4] for x in pkl[key]]
 #    plt.close('all')
-    tools.plot_confusion_matrix ('rnn_new_data'+ key + '.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True,cmap=cmap)
+    tools.plot_confusion_matrix ('cropping'+ key + '.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True,cmap=cmap, title='NewData {}'.format(key))
 
 
 #%% Differenceplot

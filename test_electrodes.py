@@ -34,14 +34,14 @@ if __name__ == '__main__':
     
     #%%
     if os.name == 'posix':
-        datadir  = '../'
+        datadir  = './'
     
     else:
         datadir = 'c:\\sleep\\data\\'
     #    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
         datadir = 'c:\\sleep\\cshs50\\'
     
-    def load_data(tsinalis=False):
+    def load_data():
         global sleep
         global data
         sleep = sleeploader.SleepDataset(datadir)
@@ -58,11 +58,7 @@ if __name__ == '__main__':
     
         target[target==8] = 0
         target = keras.utils.to_categorical(target)
-        if tsinalis:
-            data = data[:,:,0]
-            data = tools.future(data,4)
-            data = np.expand_dims(data,-1)
-            data = np.expand_dims(data,1)
+
         return data, target, groups
         
     data,target,groups = load_data()
@@ -78,34 +74,35 @@ if __name__ == '__main__':
     
     # 
     if 'data' in vars():
-        if np.sum(np.isnan(data)) or np.sum(np.isnan(data)):print('Warning! NaNs detected')
+        if np.any(np.isnan(data)) or np.any(np.isnan(data)):print('Warning! NaNs detected')
     
     #
     #%%
     print("starting")
     comment = 'testing_electrodes for feat'
     print(comment)
-
+    plot = False
     ##%% 
     epochs = 250
     batch_size = 512
+
     results = dict()
-    r = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=25, plot=True)
+    r = cv(feats_eeg, target, groups, models.ann, name = 'eeg', stop_after=25, plot=plot)
     results.update(r)
-    r = cv(np.hstack([feats_eeg,feats_eog]), target, groups, models.ann, name = 'eeg+eog', stop_after=25)  
+    r = cv(np.hstack([feats_eeg,feats_eog]), target, groups, models.ann, name = 'eeg+eog', stop_after=15)  
     results.update(r)
-    r = cv(np.hstack([feats_eeg,feats_emg]), target, groups, models.ann, name = 'eeg+emg', stop_after=25) 
+    r = cv(np.hstack([feats_eeg,feats_emg]), target, groups, models.ann, name = 'eeg+emg', stop_after=15) 
     results.update(r)
-    r = cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann,epochs=epochs, name = 'all', stop_after=25) 
+    r = cv(np.hstack([feats_eeg,feats_eog,feats_emg]), target, groups, models.ann, name = 'all', stop_after=15) 
     results.update(r)
     
-    #with open('results_electrodes.pkl', 'wb') as f:
-    #            pickle.dump(result, f)
+    with open('results_electrodes.pkl', 'wb') as f:
+                pickle.dump(results, f)
     ###%% 
     epochs = 250
     batch_size = 512
     #
-    cropsize = ??
+    cropsize = 2800
     r = cv(data[:,:,0:1],   target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'eeg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)
     results.update(r)
     r = cv(data[:,:,0:2],   target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'eeg+eog', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)  
@@ -114,31 +111,33 @@ if __name__ == '__main__':
     results.update(r)
     r = cv(data[:,:,:],     target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'all', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
     results.update(r)
-    #with open('results_electrodes_balanced.pkl', 'wb') as f:
-    #            pickle.dump(result, f)
+    with open('results_electrodes.pkl', 'wb') as f:
+                pickle.dump(results, f)
     
     
     #%% weighting test
     
 #    r = pickle.load('results_balanced.pkl')
-    batch_size = 512
-    name = 'cropped2000'
-    r1 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
-                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
-                         plot=True, stop_after=15, balanced=False, cropsize=2000)
-    name = 'cropped2700'
-    r2 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
-                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
-                         plot=True, stop_after=15, balanced=False, cropsize=2700)
-    name = 'cropped2900'
-    r3 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
-                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
-                         plot=True, stop_after=15, balanced=False, cropsize=2700)
-    name = 'no cropped'
-    r4 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
-                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
-                         plot=True, stop_after=15, balanced=False, cropsize=0)
-    pickle.dump([r1,r2,r3, r4], open('cropping_results_alldatal2.pkl', 'wb'))
+#    batch_size = 512
+#    
+#    
+#    name = 'cropped2000'
+#    r1 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
+#                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
+#                         plot=True, stop_after=15, balanced=False, cropsize=2800)
+#    name = 'cropped2700'
+#    r2 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
+#                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
+#                         plot=True, stop_after=15, balanced=False, cropsize=2800)
+#    name = 'cropped2900'
+#    r3 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
+#                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
+#                         plot=True, stop_after=15, balanced=False, cropsize=2800)
+#    name = 'no cropped'
+#    r4 = keras_utils.cv (data, target, groups, models.cnn3adam_filter_l2, name=name,
+#                         epochs=50, folds=5,batch_size=batch_size, counter=counter,
+#                         plot=True, stop_after=15, balanced=False, cropsize=0)
+#    pickle.dump([r1,r2,r3, r4], open('cropping_results_alldatal2.pkl', 'wb'))
     #r['cnn3_balanced'] = cv(data, target, groups, models.cnn3adam_filter,
     #                                name='balanced',epochs=300, folds=5, batch_size=batch_size, 
     #                                counter=counter, plot=True, stop_after=15, balanced=True)

@@ -96,23 +96,40 @@ def test(data, *args):
     if args is not (): assert np.all([len(data)==len(x) for x in args])
 
 
-def to_sequences(data, *args, seqlen = 0, tolist = True, wrap = False):
+def to_sequences(data, *args, groups=False, seqlen = 0, tolist = True, wrap = False):
     '''
     Creates time-sequences
+    
+    :param groups: Only creates sequences with members of the same group
     :returns list: list of list of numpy arrays. this way no memory redundance is created
     '''
     if seqlen==0: return data if args is  () else [data]+list(args)
     if seqlen==1: return  np.expand_dims(data,1) if args is () else [np.expand_dims(data,1)]+list(args)
     if args is not (): assert np.all([len(data)==len(x) for x in args]), 'Data and Targets must have same length'
+    if groups is not False: assert len(data)==len(groups), 'Data and Groups must have the same size {}:{}'.format(len(data), len(groups))
     assert data.shape[0] > seqlen, 'Future steps must be smaller than number of datapoints'
     
-    data = [x for x in data]
+    data = [x for x in data] # transform to lists
     new_data = []
     for i in range((len(data))if wrap else (len(data)-seqlen+1) ):
         seq = []
         for s in range(seqlen):
             seq.append(data[(i+s)%len(data)])
         new_data.append(seq)
+        
+    if groups is not False:
+        new_groups = []
+        for i in range((len(groups))if wrap else (len(groups)-seqlen+1) ):
+            seq = []
+            for s in range(seqlen):
+                seq.append(groups[(i+s)%len(groups)])
+            new_groups.append(seq)
+        new_groups = np.array(new_groups)
+        overlap = (np.min(new_groups,1)!=np.max(new_groups,1))
+        remove_idx = set(np.where(overlap)[0])
+        new_groups = np.array([v for i, v in enumerate(new_groups) if i not in remove_idx])[:,0]
+        new_data   = [v for i, v in enumerate(new_data) if i not in remove_idx]
+        
     if not tolist: 
         new_data = np.array(new_data, dtype=np.float32)  
         
@@ -121,8 +138,12 @@ def to_sequences(data, *args, seqlen = 0, tolist = True, wrap = False):
         for array in args:
             new_array = np.roll(array, -seqlen+1)
             if not wrap: new_array = new_array[:-seqlen+1]
+            if groups is not False:  new_array = [v for i, v in enumerate(new_array) if i not in remove_idx]
             assert len(new_array)==len(new_data[0]), 'something went wrong {}!={}'.format(len(new_array),len(new_data[0])) 
-            new_data.append(new_array)
+            new_data.append(np.array(new_array))
+        if groups is not False:
+            new_data.append(new_groups)
+        
     
     return new_data
 
@@ -460,8 +481,11 @@ def plot_results_per_patient(predictions, targets, groups, title='Results per Pa
         f1s.append(f1)
         accs.append(acc)
     if fname != '':plt.figure()
+
     plt.plot(f1s,'go')
     plt.plot(accs,'bo')
+    if np.min(f1s) > 0.5:
+        plt.ylim([0.5,1])
     plt.legend(['F1', 'Acc'])
     plt.xlabel('Patient')
     plt.ylabel('Score')
