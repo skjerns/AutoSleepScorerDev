@@ -466,5 +466,4 @@ def cnn5(input_shape, n_classes):
     model.add(Dense(n_classes, activation = 'softmax'))
     model.compile(loss='categorical_crossentropy', optimizer=Adadelta())
     return model
-m=cnn3adam_filter([3000,3],5)
 print('loaded model.py')

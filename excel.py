@@ -29,7 +29,9 @@ def natural_key(string_):
 #val = np.vstack([val_acc, val_f1]).T
 #test = np.vstack([test_acc, test_f1]).T
 
-#a   = pickle.load(open('.\\results_SS_crop_cnnBal_rnn_Nobal.pkl','rb'))
+a   = pickle.load(open('results_recurrent_newest.pkl','rb'))
+
+
 names = sorted(a.keys(), key=natural_key)
 res = [[a[key]] for key in names]
 
@@ -73,6 +75,7 @@ for exp in res:
 s4 = np.vstack(all_scores).T
 
 copypasta = []
+copypasta.extend(['\t'.join([i for i in names])])
 copypasta.extend(['\t'.join([str(x) for x in i]) for i in s1])
 copypasta.append('')
 copypasta.append('')

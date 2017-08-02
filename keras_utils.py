@@ -4,6 +4,7 @@ import time
 import keras
 import tools
 import pickle
+import models
 import numpy as np
 import matplotlib.pyplot as plt
 import keras.backend.tensorflow_backend as K
@@ -120,6 +121,64 @@ def get_activations(model, data, layer, batch_size=256, flatten=True, cropsize=0
     if flatten: activations = activations.reshape([len(activations),-1])
     return activations
 
+def train_models(data, targets, groups):
+    """
+    trains a cnn3adam_filter_l2 model with a LSTM on top on 
+    the given data with 20% validation set and returns the two models
+    """
+    batch_size = 512
+    cropsize = 2800
+    input_shape = list((np.array(data[0])).shape) #train_data.shape
+    input_shape[0] = cropsize
+    n_classes = targets.shape[1]
+    train_idx, val_idx = GroupKFold(5).split(groups,groups,groups).__next__()
+    train_data   = [data[i] for i in train_idx]
+    train_target = targets[train_idx]
+    train_groups = groups[train_idx]
+    val_data     = [data[i] for i in val_idx]
+    val_target   = targets[val_idx]
+    val_groups   = groups[val_idx]
+    model = models.cnn3adam_filter_l2(input_shape, n_classes)
+    g_train= generator(train_data, train_target, batch_size, val=False, cropsize=cropsize)
+    g_val  = generator(val_data, val_target, batch_size, val=True, cropsize=cropsize)
+    cb  = Checkpoint_balanced(g_val, verbose=1, groups=val_groups,
+                              epochs_to_stop=15, plot = True, name = '{}, {}'.format(model.name, 'testing'))
+    model.fit_generator(g_train, g_train.n_batches, epochs=250, callbacks=[cb], max_queue_size=1, verbose=0)
+    val_acc = cb.best_acc
+    val_f1  = cb.best_f1
+    print('CNN Val acc: {:.1f}, Val F1: {:.1f}'.format(val_acc*100, val_f1*100))
+    
+    # LSTM training
+    rnn_modelfun = models.pure_rnn_do
+    lname = 'fc1'
+    seq = 6
+    rnn_epochs = 250
+    stopafter_rnn = 15
+    features = get_activations(model, train_data + val_data, lname, batch_size*2, cropsize=cropsize)
+    train_data_extracted = features[0:len(train_data)]
+    val_data_extracted   = features[len(train_data):]
+    assert (len(train_data)==len(train_data_extracted)) and (len(val_data)==len(val_data_extracted))
+    train_data_seq, train_target_seq, train_groups_seq = tools.to_sequences(train_data_extracted, train_target,groups=train_groups, seqlen=seq)
+    val_data_seq, val_target_seq, val_groups_seq       = tools.to_sequences(val_data_extracted,   val_target,  groups=val_groups, seqlen=seq)
+    rnn_shape  = list((np.array(train_data_seq[0])).shape)
+    neurons = int(np.sqrt(rnn_shape[-1])*4)
+    rnn_model  = rnn_modelfun(rnn_shape, n_classes, layers=2, neurons=neurons, dropout=0.3)
+    print('Starting RNN model with input from layer fc1: {} at {}'.format(rnn_model.name, rnn_shape, time.ctime()))
+    g_train= generator(train_data_seq, train_target_seq, batch_size, val=False)
+    g_val  = generator(val_data_seq, val_target_seq, batch_size, val=True)
+    cb = Checkpoint_balanced(g_val, verbose=1, groups = val_groups_seq, 
+                             epochs_to_stop=stopafter_rnn, plot = True, name = '{}, {}'.format(rnn_model.name,'fc1'))         
+    rnn_model.fit_generator(g_train, g_train.n_batches, epochs=rnn_epochs, verbose=0, callbacks=[cb],max_queue_size=1)    
+    val_acc = cb.best_acc
+    val_f1  = cb.best_f1
+    print('LSTM Val acc: {:.1f}, Val F1: {:.1f}'.format(val_acc*100, val_f1*100))
+
+    return model, rnn_model
+    
+    
+    
+    
+
 def test_data_cnn(data, target, model):
     """
     take a model and predict on the data
@@ -158,7 +217,8 @@ def test_data_cnn_rnn(data, target, cnn, layername, rnn, cropsize=0, mode = 'sco
     if mode=='scores':
         return (cnn_acc, cnn_f1, rnn_acc, rnn_f1)
     elif mode=='preds':
-        return (cnn_pred,results, target, target_seq)
+        print('CNN acc: {:.1f} CNN f1: {:.1f} LSTM acc: {:.1f} LSTM f1: {:.1f}'.format(cnn_acc*100,cnn_f1*100,rnn_acc*100,rnn_f1*100))
+        return (cnn_pred, results, target, target_seq)
 
 
 #%%
@@ -366,23 +426,23 @@ class generator_balanced(object):
                 y_batch.extend([self.Y[i] for i in idx])
                 self.idx[label] = []
             else:
-                number = self.n_per_class if label!=self.slabel else self.n_per_class
-                indexes      = np.random.choice(np.arange(idx.size), int(number*0.9 if (label in [0,2,3,4]) else number), replace = False)
+                number = self.n_per_class# if label!=self.slabel else self.n_per_class
+                indexes      = np.random.choice(np.arange(idx.size), number, replace = False)
                 choice = idx[indexes]
                 x_batch.extend([self.X[i] for i in choice])
                 y_batch.extend([self.Y[i] for i in choice])
                 self.idx[label] = np.delete (self.idx[label], indexes)
                 self.p[label]   = np.delete (self.p[label], indexes)
                 self.p[label]   = self.p[label] / np.sum(self.p[label])
-                if label in [0,2,3,4]:
-                    idx = self.idx[label]
-                    indexes_hard    = np.random.choice(np.arange(idx.size), int(number*0.1), p=self.p[label], replace = False)
-                    choice = idx[indexes_hard]
-                    x_batch.extend([self.X[i] for i in choice])
-                    y_batch.extend([self.Y[i] for i in choice])
-                    self.idx[label] = np.delete (self.idx[label], indexes_hard)
-                    self.p[label]   = np.delete (self.p[label], indexes_hard)
-                    self.p[label]   = self.p[label] / np.sum(self.p[label])
+#                if label in [0,2,3,4]:
+#                    idx = self.idx[label]
+#                    indexes_hard    = np.random.choice(np.arange(idx.size), int(number*0.1), p=self.p[label], replace = False)
+#                    choice = idx[indexes_hard]
+#                    x_batch.extend([self.X[i] for i in choice])
+#                    y_batch.extend([self.Y[i] for i in choice])
+#                    self.idx[label] = np.delete (self.idx[label], indexes_hard)
+#                    self.p[label]   = np.delete (self.p[label], indexes_hard)
+#                    self.p[label]   = self.p[label] / np.sum(self.p[label])
                 
         diff = len(x_batch[0]) - self.cropsize
         
@@ -420,7 +480,7 @@ class generator(object):
         
         assert len(X) == len(Y), 'X and Y must be the same length {}!={}'.format(len(X),len(Y))
         if sequential: print('Using sequential mode')
-        
+        print ('starting normal generator')
         self.X = X
         self.Y = Y
         self.rnd_idx = np.arange(len(Y))
@@ -490,7 +550,7 @@ class generator(object):
             weights = np.ones(len(y_batch))
             for t in np.unique(np.argmax(y_batch,1)):
                 weights[np.argmax(y_batch,1)==t] = self.c_weights[t]
-            return (x_batch,y_batch, weights)  
+            return (x_batch,y_batch)  
         
     def next_sequential(self):
         x_batch = np.array([self.X[(seq * self.n_batches + self.step) % len(self.X)] for seq in range(self.batch_size)], dtype=np.float32)
@@ -508,7 +568,7 @@ class generator(object):
         
 #%%
 
-def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size=512,
+def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size=256,
        val_batch_size=0, stop_after=0, name='', counter=0, plot = True, balanced=False, cropsize=0):
     """
     Crossvalidation routinge for an RNN using extracted features on a basemodel
@@ -528,7 +588,7 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
         modfun = False
 
     gcv = GroupKFold(folds)
-    dict_id    = modfun.__name__ if modfun else 'cnn' + '_' + name
+    dict_id    = modfun.__name__ + name if modfun else 'cnn' + '_' + name
     results    = {dict_id:[]}
     if rnn:
         for lname in rnn['layers']:
@@ -577,9 +637,9 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
             cb  = Checkpoint_balanced(g_val, verbose=1, counter=counter, groups=val_groups,
                  epochs_to_stop=stop_after, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
         
-        if modfun: model.fit_generator(g, g.n_batches, verbose=0, epochs=epochs, callbacks=[cb], max_q_size=1)
+        if modfun: model.fit_generator(g, g.n_batches, epochs=epochs, callbacks=[cb], max_queue_size=1, verbose=0)
         
-        y_pred = model.predict_generator(g_test, g_test.n_batches, max_q_size=1)
+        y_pred = model.predict_generator(g_test, g_test.n_batches, max_queue_size=1)
         y_true = g_test.Y
         val_acc = cb.best_acc
         val_f1  = cb.best_f1
@@ -639,8 +699,8 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
                     cb = Checkpoint_balanced(g_val, verbose=1, counter=counter, groups = val_groups_seq, 
                          epochs_to_stop=stopafter_rnn, plot = plot, name = '{}, {}, fold: {}'.format(name,lname,i))
                 
-                rnn_model.fit_generator(g, g.n_batches, epochs=rnn_epochs, verbose=0, callbacks=[cb])    
-                y_pred = rnn_model.predict_generator(g_test, g_test.n_batches, max_q_size=1)
+                rnn_model.fit_generator(g, g.n_batches, epochs=rnn_epochs, verbose=0, callbacks=[cb],max_queue_size=1)    
+                y_pred = rnn_model.predict_generator(g_test, g_test.n_batches, max_queue_size=1)
                 y_true = g_test.Y
                 val_acc = cb.best_acc
                 val_f1  = cb.best_f1

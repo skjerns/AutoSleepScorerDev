@@ -12,10 +12,8 @@ import numpy as np
 import os.path
 import pandas as pd
 import seaborn as sns
-import matplotlib.colors as colors
 import matplotlib.pyplot as plt
-from multiprocessing import Pool
-#import pyfftw
+from multiprocessing import Pool, cpu_count
 from scipy import fft
 from scipy import stats
 from scipy.signal import butter, lfilter
@@ -148,17 +146,7 @@ def to_sequences(data, *args, groups=False, seqlen = 0, tolist = True, wrap = Fa
     return new_data
 
 
-#def normalize(input_directory, output_directory):
-#    """
-#    Takes all EEG files in the directory and does the following:
-#    - Remove all unused headers
-#    - Resample to 100hz
-#    """   
-#    eeg_files = [s for s in os.listdir(input_directory) if s.endswith(('.vhdr','rec','edf'))]
-#    for eeg_file in eeg_files:
-#        header = load_eeg_header( os.path.join( input_directory, eeg_file), preload=True)
-#        trim_channels(header, sleeploader.SleepDataset.channels)
-#        header = header.resample(100.0)
+
 
 def label_to_one_hot(y):
     '''
@@ -171,19 +159,42 @@ def label_to_one_hot(y):
 
 
 
-def normalize(signals):
+def normalize(signals, groups=None, MP = False):
     """
     :param signals: 1D, 2D or 3D signals
-    returns each element to have mean 0
+    returns zscored per patient
     """
     if signals.ndim == 1: signals = np.expand_dims(signals,0) 
     if signals.ndim == 2: signals = np.expand_dims(signals,2)
-    new_signals = np.zeros(signals.shape, dtype=np.int32)
-    for i in np.arange(signals.shape[2]):
-        new_signals[:,:,i] = np.subtract(signals[:,:,i].T,np.mean(signals[:,:,i],axis=1)).T
-        
-    return new_signals.squeeze() if new_signals.shape[2]==1 else new_signals
 
+    if groups is None: 
+        print('Normalizing over whole dataset')
+        return stats.zscore(signals, axis=None)
+    if MP:
+        print('Normalizing per patient using {} cores'.format(cpu_count()))
+        p = Pool(cpu_count()) #use all except for one
+        res = []
+        new_signals = np.zeros_like(signals)
+        for ID in np.unique(groups):
+            idx = groups==ID
+            job = p.apply_async(stats.zscore, args = (signals[idx],), kwds={'axis':None})
+            res.append(job)
+        start = 0
+        for r in res:
+            values = r.get(timeout = 1200)
+            end = start + len(values)
+            new_signals[start:end] = values
+            end = start
+        return new_signals
+    else:
+        print('Normalizing per patient')
+        res = []
+        for ID in np.unique(groups):
+            idx = groups==ID
+            job = stats.zscore(signals[idx], axis=None)
+            res.append(job)
+        new_signals = np.vstack(res)
+        return new_signals
 
 
 
@@ -229,10 +240,11 @@ def feat_eeg(signals):
     feats[:,3] = beta  /sum_abs_pow
     feats[:,4] = gamma /sum_abs_pow
     feats[:,5] = spindle /sum_abs_pow
-    feats[:,6] = np.log10(stats.kurtosis(signals,fisher=False,axis=1))        # kurtosis
+    feats[:,6] = np.log10(stats.kurtosis(signals, fisher=False, axis=1))        # kurtosis
     feats[:,7] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
     #feats[:,7] = np.polynomial.polynomial.polyfit(np.log(f[np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]), np.log(w[0,np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),1)
     feats[:,8] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5)
+    if np.any(feats==np.nan): print('NaN detected')
     return np.nan_to_num(feats)
 
 
@@ -264,6 +276,8 @@ def feat_wavelet(signals):
     feats[:,6] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
     #feats[:,7] = np.polynomial.polynomial.polyfit(np.log(f[np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]), np.log(w[0,np.arange(0.5*nsamp/sfreq,50*nsamp/sfreq, dtype=int)]),1)
     feats[:,7] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5)
+    if np.any(feats==np.nan): print('NaN detected')
+
     return np.nan_to_num(feats)
 
 
@@ -291,15 +305,15 @@ def feat_eog(signals):
     feats[:,4] = gamma /sum_abs_pow
     feats[:,5] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5) #smean
     feats[:,6] = np.sqrt(np.max(signals, axis=1))    #PAV
-    feats[:,7] = np.sqrt(np.min(signals, axis=1))    #VAV   
+    feats[:,7] = np.sqrt(np.abs(np.min(signals, axis=1)))   #VAV   
     feats[:,8] = np.argmax(signals, axis=1)/nsamp #PAP
     feats[:,9] = np.argmin(signals, axis=1)/nsamp #VAP
     feats[:,10] = np.sqrt(np.sum(np.abs(signals), axis=1)/ np.mean(np.sum(np.abs(signals), axis=1))) # AUC
     feats[:,11] = np.sum(((np.roll(np.sign(signals), 1,axis=1) - np.sign(signals)) != 0).astype(int),axis=1)/nsamp #TVC
     feats[:,12] = np.log10(np.std(signals, axis=1)) #STD/VAR
     feats[:,13] = np.log10(stats.kurtosis(signals,fisher=False,axis=1))       # kurtosis
-    feats[:,14] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
-    
+    feats[:,14] = np.log10(-np.sum([(x/nsamp)*((np.log((x+np.spacing(1))/nsamp))) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
+    if np.any(feats==np.nan): print('NaN detected')
     return np.nan_to_num(feats)
 
 
@@ -326,12 +340,14 @@ def feat_emg(signals):
     feats[:,5] = np.dot(np.array([3.5,4,5,7,30]),feats[:,0:5].T ) / (sfreq/2-0.5) #smean
     emg = np.sum(np.abs(w[:,np.arange(12.5*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)
     feats[:,6] = emg / np.sum(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)  # ratio of high freq to total motor
-    feats[:,7] = np.log(np.median(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1))    # median freq
-    feats[:,8] = np.log(np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1))   #  mean freq
+    feats[:,7] = np.median(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)    # median freq
+    feats[:,8] = np.mean(np.abs(w[:,np.arange(8*nsamp/sfreq,32*nsamp/sfreq, dtype=int)]),axis=1)   #  mean freq
     feats[:,9] = np.std(signals, axis=1)    #  std 
     feats[:,10] = np.mean(signals,axis=1)
     feats[:,11] = np.log10(stats.kurtosis(signals,fisher=False,axis=1) )
-    feats[:,12] = np.log10(-np.sum([(x/nsamp)*(np.log(x/nsamp)) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
+    feats[:,12] = np.log10(-np.sum([(x/nsamp)*((np.log((x+np.spacing(1))/nsamp))) for x in np.apply_along_axis(lambda x: np.histogram(x, bins=8)[0], 1, signals)],axis=1))  # entropy.. yay, one line...
+    if np.any(feats==np.nan): print('NaN detected')
+
     return np.nan_to_num(feats)
 
 
@@ -349,9 +365,9 @@ def get_all_features(data):
     :param data: datapoints x samples x dimensions (dimensions: EEG,EOG,EMG)
     """
     eeg = feat_eeg(data[:,:,0])
-    eog = feat_eog(data[:,:,1])
-    emg = feat_emg(data[:,:,2])
-    return np.hstack([eeg,eog,emg])
+    emg = feat_emg(data[:,:,1])
+    eog = feat_eog(data[:,:,2])
+    return np.hstack([eeg,emg,eog])
 
 
 def get_all_features_m(data):
@@ -369,7 +385,7 @@ def get_all_features_m(data):
     p.close()
     p.join()
 
-    return np.hstack([eeg,eog,emg])
+    return np.hstack([eeg,emg,eog])
 
 
 def save_results(save_dict=None, **kwargs):
@@ -417,6 +433,8 @@ def plot_confusion_matrix(fname, conf_mat, target_names,
     """Plot Confusion Matrix."""
     c_names = []
     r_names = []
+    if len(target_names) != len(conf_mat):
+        target_names = [str(i) for  i in np.arange(len(conf_mat))]
     for i, label in enumerate(target_names):
         c_names.append(label + '\n(' + str(int(np.sum(conf_mat[:,i]))) + ')')
         align = len(str(int(np.sum(conf_mat[i,:])))) + 3 - len(label)
@@ -428,7 +446,7 @@ def plot_confusion_matrix(fname, conf_mat, target_names,
     df = pd.DataFrame(data=np.sqrt(cm), columns=c_names, index=r_names)
     if fname != '':plt.figure(figsize=figsize)
     g  = sns.heatmap(df, annot = cm if perc else conf_mat , fmt=".1f" if perc else ".0f",
-                     linewidths=.5, vmin=0, vmax=np.sqrt(100), cmap=cmap, cbar=cbar)    
+                     linewidths=.5, vmin=0, vmax=np.sqrt(100), cmap=cmap, cbar=cbar,annot_kws={"size": 13})    
     g.set_title(title)
     if cbar:
         cbar = g.collections[0].colorbar
@@ -438,6 +456,7 @@ def plot_confusion_matrix(fname, conf_mat, target_names,
     g.set_xlabel('Predicted sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
 #    plt.tight_layout()
     if fname!='':
+        plt.tight_layout()
         g.figure.savefig(os.path.join('plots', fname))
 
 
@@ -457,7 +476,7 @@ def plot_difference_matrix(fname, confmat1, confmat2, target_names,
     plt.figure(figsize=figsize)
     g  = sns.heatmap(df, annot=cm, fmt=".1f" ,
                      linewidths=.5, vmin=-10, vmax=10, 
-                     cmap='coolwarm_r',**kwargs)#sns.diverging_palette(20, 220, as_cmap=True))    
+                     cmap='coolwarm_r',annot_kws={"size": 13},**kwargs)#sns.diverging_palette(20, 220, as_cmap=True))    
     g.set_title(title)
     g.set_ylabel('True sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
     g.set_xlabel('Predicted sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
@@ -494,6 +513,41 @@ def plot_results_per_patient(predictions, targets, groups, title='Results per Pa
     plt.title(title)
     if fname!='':
         plt.savefig(os.path.join('plots', fname))
+
+def plot_hypnogram(stages, labels=None):
+    if labels is None:
+        if np.max(stages)==4:
+            print('assuming 0=W, 1=S1, 2=S2, 3=SWS, 4=REM')
+            labels = ['W', 'S1', 'S2', 'SWS', 'REM']
+        if np.max(stages)==5:
+            print('assuming 0=W, 1=S1, 2=S2, 3=S3, 4=S4, 5=SWS')
+            labels = ['W', 'S1', 'S2', 'S3', 'S4', 'REM']
+        if np.max(stages)==8:
+            print('assuming 0=W, 1=S1, 2=S2, 3=S3, 4=S4, 5=SWS')
+            labels = ['W', 'S1', 'S2', 'S3', 'S4', 'REM', 'Movement']
+    labels_dict = dict(zip(np.arange(len(labels)),labels))
+
+    x = []
+    y = []
+    for i in np.arange(len(stages)):
+        s = stages[i][0]
+        if labels_dict[s]=='W':   p = -0
+        if labels_dict[s]=='REM': p = -1
+        if labels_dict[s]=='S1':  p = -2
+        if labels_dict[s]=='S2':  p = -3
+        if labels_dict[s]=='SWS': p = -4
+        if labels_dict[s]=='S3': p = -4
+        if labels_dict[s]=='S4': p = -5
+        if i!=0:
+            x.append(p)
+            y.append(i-1)   
+        x.append(p)
+        y.append(i)   
+
+    plt.plot(y,x)
+    plt.yticks([0,-1,-2,-3,-4,-5], ['W','REM', 'S1', 'S2', 'S3', 'S4' ])
+
+
 
 def memory():
     from wmi import WMI

@@ -36,9 +36,11 @@ if __name__ == "__main__":
     
     else:
     #    datadir = 'c:\\sleep\\data\\'
-    #    datadir = 'd:\\sleep\\vinc\\'
+#        datadir = 'd:\\sleep\\vinc\\'
 #        datadir = 'c:\\sleep\\emsa\\'
         datadir = 'c:\\sleep\\cshs50\\'
+#        datadir = 'c:\\sleep\\edfx\\'
+
 #
     
     def load_data(tsinalis=False):
@@ -51,10 +53,10 @@ if __name__ == "__main__":
 #        sleep.load()
     #    sleep.save_object()
         sleep.load_object()
-    
         data, target, groups = sleep.get_all_data(groups=True)
     
-        data = scipy.stats.mstats.zscore(data , axis = None)
+        data = tools.normalize(data)
+        target[target==4] = 3
         target[target==5] = 4
         target[target==8] = 0
         target = keras.utils.to_categorical(target)
@@ -63,18 +65,20 @@ if __name__ == "__main__":
     data,target,groups = load_data()
     #%%
     
-    print('Extracting features')
-    target = np.load('target.npy')
-    groups = np.load('groups.npy')
-    feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
-    feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,1])
-    feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,2])
-    feats_all = np.hstack([feats_eeg, feats_eog, feats_emg])
-    # 
+#    print('Extracting features')
+#    target = np.load('target.npy')
+#    groups = np.load('groups.npy')
+#    feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
+#    feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,1])
+#    feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,2])
+#    feats_all = np.hstack([feats_eeg, feats_emg, feats_eog ])
+#    feats_all = scipy.stats.stats.zscore(feats_all)
+#    # 
     if 'data' in vars():
         if np.sum(np.isnan(data)) or np.sum(np.isnan(data)):print('Warning! NaNs detected')
     #%%
-    
+    results = dict()
+
     comment = 'rnn_test'
     print(comment)
     
@@ -101,16 +105,15 @@ if __name__ == "__main__":
     #            pickle.dump(r, f)
     #%%
 #    %%   seqlen = 6, 5-fold
-    results = dict()
-    batch_size = 512
-    feats_seq, target_seq, group_seq = tools.to_sequences(feats_all, target, groups=groups, seqlen = 6, tolist=False)
-    r = keras_utils.cv(feats_seq, target_seq, group_seq, models.pure_rnn_do, epochs=250, folds=5, batch_size=batch_size, name='RNN',
-                                    counter=counter, plot=True, stop_after=15, balanced=True)
-    results.update(r)
-    with open('results_recurrent', 'wb') as f:
-                pickle.dump(results, f)
-#    
-    
+#    batch_size = 512
+#    feats_seq, target_seq, group_seq = tools.to_sequences(feats_all, target, groups=groups, seqlen = 6, tolist=False)
+#    r = keras_utils.cv(feats_seq, target_seq, group_seq, models.pure_rnn_do, epochs=250, folds=5, batch_size=batch_size, name='RNN',
+#                                    counter=counter, plot=True, stop_after=15, balanced=True)
+#    results.update(r)
+#    with open('results_recurrent', 'wb') as f:
+#                pickle.dump(results, f)
+###    
+##    
     #%%   seqlen = 6, 5-fold mit past
     #r = dict()
     #batch_size = 1440
@@ -125,7 +128,7 @@ if __name__ == "__main__":
     #with open('results_recurrent_seqlen-6-w5.pkl', 'wb') as f:
     #            pickle.dump(r, f)
     #%%
-    #
+    #s
     batch_size = 256
     epochs = 250
     name = 'CNN+LSTM'
@@ -137,7 +140,7 @@ if __name__ == "__main__":
     model = models.cnn3adam_filter_l2
     r = keras_utils.cv (data, target, groups, model, rnn, name=name,
                              epochs=epochs, folds=5, batch_size=batch_size, counter=counter,
-                             plot=False, stop_after=15, balanced=False, cropsize=2800)
-    results.rupdate(r)
-    with open('results_recurrent', 'wb') as f:
+                             plot=True, stop_after=15, balanced=False, cropsize=2800)
+    results.update(r)
+    with open('results_recurrent_test', 'wb') as f:
                 pickle.dump(results, f)

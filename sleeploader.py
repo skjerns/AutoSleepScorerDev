@@ -28,6 +28,7 @@ class SleepDataset(object):
         """
         :param directory: a directory string
         """
+        if not os.path.isdir(directory): raise FileNotFoundError( 'Director {} not found'.format(directory))
         self.resample = False
         self.available_channels = []
         self.data = list()
@@ -39,11 +40,13 @@ class SleepDataset(object):
         self.tqdmloop = False
         self.printed_channels = False
         self.channels   = {'EEG': False,
-                  'EOG': False,
-                  'EMG': False}    
+                           'EMG': False,
+                           'EOG': False
+                          }
         self.references = {'RefEEG': False,
-                  'RefEOG': False,
-                  'RefEMG': False}
+                           'RefEMG': False,
+                           'RefEOG': False
+                           }
     
     
     def check_for_normalization(self, data_header):
@@ -56,18 +59,20 @@ class SleepDataset(object):
 #        if not data_header.info['lowpass'] == 50:
 #            print('WARNING: lowpass not at 50')
         if not self.channels['EEG'] in channels:
-            print('WARNING: EEG channel missing')            
-        if not self.channels['EOG'] in channels:
-            print('WARNING: EOG channel missing')
+            print('WARNING: EEG channel missing')    
         if not self.channels['EMG'] in channels:
             print('WARNING: EMG channel missing')
+        if not self.channels['EOG'] in channels:
+            print('WARNING: EOG channel missing')
+
 
         if self.references['RefEEG'] and not self.references['RefEEG'] in channels:
             print('WARNING: EEG channel missing')
-        if self.references['RefEOG'] and not self.references['RefEOG'] in channels:
-            print('WARNING: EOG channel missing')
         if self.references['RefEMG'] and not self.references['RefEMG'] in channels:
             print('WARNING: EMG channel missing')
+        if self.references['RefEOG'] and not self.references['RefEOG'] in channels:
+            print('WARNING: EOG channel missing')
+
 
         
         
@@ -78,6 +83,9 @@ class SleepDataset(object):
         :param mode: standard: just read first row, overwrite = if second row!=0,
                      take that value, concatenate = add values together
         """
+        
+        h = {'0':0, '1':1, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9,
+             'W':0, 'S1':1, 'S2':2, 'S3':3, 'S4':4, 'SWS':3, 'REM':5, 'A':6, 'M':8}
         
         dataformats = dict({
                             'txt' :'csv',
@@ -93,11 +101,11 @@ class SleepDataset(object):
                 lhypno = []
                 for row in reader:
                     if mode == 'standard':
-                        lhypno.append(int(row[0]))
+                        lhypno.append(h[row[0]])
                         
                     elif mode == 'overwrite':
                         if int(row[1]) == 0:
-                            lhypno.append(int(row[0]))
+                            lhypno.append(h[row[0]])
                         else:
                             lhypno.append(8)
                             #lhypno.append(int(row[1]))
@@ -149,7 +157,7 @@ class SleepDataset(object):
         elif dataformat == 'eeglab':
             data = mne.io.read_raw_eeglab(filename, **kwargs)
         elif dataformat == 'brainvision':                                            # CHECK NoOptionError: No option 'markerfile' in section: 'Common Infos' 
-            data = mne.io.read_raw_brainvision(filename, **kwargs)
+            data = mne.io.read_raw_brainvision(filename, verbose=0)
         elif dataformat == 'egi':
             data = mne.io.read_raw_egi(filename, **kwargs)
         elif dataformat == 'fif':
@@ -203,7 +211,24 @@ class SleepDataset(object):
                         ch = c; break
             self._print('Infering EEG Channel... {}, Ref: {}'.format(ch, ref))
             return ch, ref
-    
+        
+        def infer_emg(channels):
+            ch = False
+            ref = False
+            if 'EMG' in channels:
+                ch = 'EMG'
+                ref = False
+            elif 'EMG1' in channels and 'EMG2' in channels:
+                ch = 'EMG1'
+                ref = 'EMG2'
+            else:
+                for c in channels:
+                    if 'EMG' in c: 
+                        ch = c
+                        break
+            self._print('Infering EMG Channel... {}, Ref: {}'.format(ch, ref))
+            return ch, ref
+        
         def infer_eog(channels):
             ch = False
             ref = False
@@ -223,32 +248,17 @@ class SleepDataset(object):
             self._print('Infering EOG Channel... {}, Ref: {}'.format(ch, ref))
             return ch, ref
         
-        def infer_emg(channels):
-            ch = False
-            ref = False
-            if 'EMG' in channels:
-                ch = 'EMG'
-                ref = False
-            elif 'EMG1' in channels and 'EMG2' in channels:
-                ch = 'EMG1'
-                ref = 'EMG2'
-            else:
-                for c in channels:
-                    if 'EMG' in c: 
-                        ch = c
-                        break
-            self._print('Infering EMG Channel... {}, Ref: {}'.format(ch, ref))
-            return ch, ref
+
         
         if ch_type.upper() == 'EEG':   return infer_eeg(channels)
-        if ch_type.upper() == 'EOG':   return infer_eog(channels)
         if ch_type.upper() == 'EMG':   return infer_emg(channels)
+        if ch_type.upper() == 'EOG':   return infer_eog(channels)
         if ch_type.lower() == 'all':
             eeg, refeeg = infer_eeg(channels)
-            eog, refeog = infer_eog(channels)
             emg, refemg = infer_emg(channels)
+            eog, refeog = infer_eog(channels)
             return ({'EEG':eeg, 'EMG':emg, 'EOG':eog}, 
-                   {'RefEEG': refeeg, 'RefEOG':refeog, 'RefEMG': refemg})
+                   {'RefEEG': refeeg, 'RefEMG': refemg, 'RefEOG':refeog})
         raise Exception('Infer_channels: Wrong channel type selected: {}'.format(ch_type))
     
     
@@ -311,8 +321,7 @@ class SleepDataset(object):
             with open(os.path.join(path, filename), 'rb') as f:
                 tmp_dict = cPickle.load(f, fix_imports=True, encoding='latin1' )
         except FileNotFoundError:
-            print('Sleepdata file {} not found'.format(filename))
-            return False
+            raise IOError ('Sleepdata file {} not found in {}'.format(filename, self.directory))
         self.__dict__.update(tmp_dict)
         return True
 
@@ -340,12 +349,12 @@ class SleepDataset(object):
         self.tqdmloop.set_description(description + ' ' * (10-len(description)))
         self.tqdmloop.refresh()
         
-    def _print(self, statement, end = '\n'):
+    def _print(self, statement):
         if self.tqdmloop:
             self.tqdmloop.write(str(statement))
             self.tqdmloop.refresh()
         else:
-            print(statement, end=end)
+            print(statement)
 
 
     def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000, resampling = True, mode = 'standard', pool=False):
@@ -359,8 +368,8 @@ class SleepDataset(object):
         hypno  = self.load_hypnogram(os.path.join(self.directory, hypno_file), mode = mode)
         header = self.load_eeg_header(os.path.join(self.directory, eeg_file), verbose='WARNING', preload=True)
         if self.channels['EEG'] == False: self.channels['EEG'], self.references['RefEEG'] = self.infer_channels(header.ch_names, 'EEG')
-        if self.channels['EOG'] == False: self.channels['EOG'], self.references['RefEOG'] = self.infer_channels(header.ch_names, 'EOG')
         if self.channels['EMG'] == False: self.channels['EMG'], self.references['RefEMG'] = self.infer_channels(header.ch_names, 'EMG')
+        if self.channels['EOG'] == False: self.channels['EOG'], self.references['RefEOG'] = self.infer_channels(header.ch_names, 'EOG')
         self.available_channels = header.ch_names
         self.sfreq = np.round(header.info['sfreq'])
         self.check_for_normalization(header)
@@ -371,41 +380,43 @@ class SleepDataset(object):
         eeg = data[labels.index('EEG'),:]
         if self.references['RefEEG']:
             eeg = eeg - data[labels.index('RefEEG'),:]
+        emg = data[labels.index('EMG'),:]
+        if self.references['RefEMG']: 
+            emg = emg - data[labels.index('RefEMG'),:]          
         eog = data[labels.index('EOG'),:]
         if self.references['RefEOG']:
             eog = eog - data[labels.index('RefEOG'),:]
-        emg = data[labels.index('EMG'),:]
-        if self.references['RefEMG']: 
-            emg = emg - data[labels.index('RefEMG'),:]     
+   
         self._progress('Filtering' )
         eeg = butter_bandpass_filter(eeg, 0.15, self.sfreq)
-        eog = butter_bandpass_filter(eog, 0.15, self.sfreq)
         emg = butter_bandpass_filter(emg, 10.0, self.sfreq)
+        eog = butter_bandpass_filter(eog, 0.15, self.sfreq)
         # Resampling
         
         if not np.isclose(self.sfreq, 100):
             if resampling == True:
                 self._progress('Resampling' )
                 res_eeg = pool.apply_async(mne.io.RawArray(np.stack([eeg]), mne.create_info(1, self.sfreq, 'eeg'), verbose=0).resample, args = (100.,))
-                res_eog = pool.apply_async(mne.io.RawArray(np.stack([eog]), mne.create_info(1, self.sfreq, 'eeg'), verbose=0).resample, args = (100.,))
                 res_emg = pool.apply_async(mne.io.RawArray(np.stack([emg]), mne.create_info(1, self.sfreq, 'eeg'), verbose=0).resample, args = (100.,))
+                res_eog = pool.apply_async(mne.io.RawArray(np.stack([eog]), mne.create_info(1, self.sfreq, 'eeg'), verbose=0).resample, args = (100.,))
                 eeg,_ = res_eeg.get(timeout=30)[0,:]
-                eog,_ = res_eog.get(timeout=30)[0,:]
                 emg,_ = res_emg.get(timeout=30)[0,:]
+                eog,_ = res_eog.get(timeout=30)[0,:]
                 eeg =eeg[0,:]
-                eog =eog[0,:]
                 emg =emg[0,:]
+                eog =eog[0,:]
                 self.sfreq = 100
             else:
                 self._print ('Not resampling')
         self._progress('Loading')
-        signal = np.stack([eeg,eog,emg]).swapaxes(0,1)
+        signal = np.stack([eeg,emg,eog]).swapaxes(0,1)
         hypno_len = len(hypno)
         eeg_len   = len(signal)
 #        print('length: hypno {} eeg {}'.format(hypno_len, eeg_len))
         epoch_len = int(eeg_len / hypno_len / self.sfreq) 
         self.samples_per_epoch = int(epoch_len * self.sfreq) 
-        signal = signal[:(len(signal)//self.samples_per_epoch)*self.samples_per_epoch]     # remove left over to ensure len(data)%3000==0
+        trunc_len = (len(signal)//self.samples_per_epoch)*self.samples_per_epoch
+        signal = signal[:trunc_len]     # remove left over to ensure len(data)%3000==0
         
         return signal.astype(self.dtype), hypno
         
@@ -484,7 +495,7 @@ class SleepDataset(object):
              flat = None, force_reload = False, shuffle = False, dtype=np.float32):
         """
         :param sel:          np.array with indices of files to load from the directory. Natural sorting.
-        :param channels:     dict with form 'EEG':'channel_name', which channel to use for which modality (EEG,EOG,EMG). If none, will try to infer automatically
+        :param channels:     dict with form 'EEG':'channel_name', which channel to use for which modality (EEG,EMG,EOG). If none, will try to infer automatically
         :param reference:    dict with form 'EEG':'channel_name', which channel to use as reference. If None, no rereferencing will be applied
         :param shuffle:      shuffle subjects or not
         :param force_reload: reload data even if already loaded
@@ -543,7 +554,7 @@ class SleepDataset(object):
             for i in self.tqdmloop:
                 eeg, curr_hypno = self.load_eeg_hypno(self.eeg_files[i], self.hypno_files[i], chunk_len, resampling, pool=p)
                 if(len(eeg) != len(curr_hypno) * self.samples_per_epoch):
-                    self._print('WARNING: EEG epochs and Hypno epochs have different length {}:{}.'.format(len(eeg),len(curr_hypno)* self.samples_per_epoch))
+                    self._print('WARNING: EEG epochs and Hypno epochs have different length {}:{} in {}.'.format(len(eeg),len(curr_hypno)* self.samples_per_epoch,self.eeg_files[i]))
                     if len(eeg) > len(curr_hypno) * self.samples_per_epoch:
                         self._print('Truncating EEG')
                         eeg = eeg[:len(curr_hypno) * self.samples_per_epoch]
