@@ -1,19 +1,15 @@
 # -*- coding: utf-8 -*-
 import os
 import re
+import csv
+import mne
+import pickle as cPickle
 import numpy as np
 import numpy.random as random
 from tools import shuffle, butter_bandpass_filter
 from multiprocessing import Pool
-from scipy.ndimage.filters import minimum_filter1d
-import csv
 from tqdm import trange
 from copy import deepcopy
-import time
-import pickle as cPickle
-#import pickle as cPickle
-#import cPickle
-import mne
 
 def natural_key(string_):
     """See http://www.codinghorror.com/blog/archives/001018.html"""
