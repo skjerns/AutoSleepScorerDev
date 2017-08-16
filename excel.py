@@ -29,7 +29,7 @@ def natural_key(string_):
 #val = np.vstack([val_acc, val_f1]).T
 #test = np.vstack([test_acc, test_f1]).T
 
-a   = pickle.load(open('results_recurrent_newest.pkl','rb'))
+#a   = pickle.load(open('./results_dataset_feat_edfx','rb'))
 
 
 names = sorted(a.keys(), key=natural_key)
@@ -92,4 +92,15 @@ copypasta.extend(['\t'.join([str(x) for x in i]) for i in s4])
 copypasta.append('')
 copypasta.append('')
 copypasta.append('')
+
+
+stop
+#%%
+results = dill.load('results_transfer_cshs50_all')
+s = []
+for exp in sorted(results):
+    print (exp)
+    res = results[exp]
+    s.extend([x for x in res[:4]])
+    s.extend([''])
 

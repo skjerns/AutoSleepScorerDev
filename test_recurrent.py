@@ -10,9 +10,11 @@ import matplotlib
 matplotlib.use('Agg')
 import numpy as np
 import keras
+import telegram_send
 import tools
 import scipy
 import models
+from copy import deepcopy
 import pickle
 import keras_utils
 from keras_utils import cv
@@ -44,12 +46,8 @@ if __name__ == "__main__":
 #
     
     def load_data(tsinalis=False):
-        global sleep
-        global data
         sleep = sleeploader.SleepDataset(datadir)
-        if 'data' in vars():  
-            del data; 
-            gc.collect()
+        gc.collect()
 #        sleep.load()
     #    sleep.save_object()
         sleep.load_object()
@@ -60,19 +58,23 @@ if __name__ == "__main__":
         target[target==5] = 4
         target[target==8] = 0
         target = keras.utils.to_categorical(target)
-        return data, target, groups
+        return deepcopy(data), deepcopy(target), deepcopy(groups)
         
     data,target,groups = load_data()
+    datadir = 'c:\\sleep\\edfx\\'
+#    data2,target2,groups2 = load_data()
+
+    trans_tuple = [data,target,groups]
     #%%
     
 #    print('Extracting features')
 #    target = np.load('target.npy')
 #    groups = np.load('groups.npy')
-#    feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
-#    feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,1])
-#    feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,2])
-#    feats_all = np.hstack([feats_eeg, feats_emg, feats_eog ])
-#    feats_all = scipy.stats.stats.zscore(feats_all)
+    feats_eeg = np.load('feats_eeg.npy')# tools.feat_eeg(data[:,:,0])
+    feats_emg = np.load('feats_emg.npy')#tools.feat_emg(data[:,:,1])
+    feats_eog = np.load('feats_eog.npy')#tools.feat_eog(data[:,:,2])
+    feats_all = np.hstack([feats_eeg, feats_emg, feats_eog ])
+    feats_all = scipy.stats.stats.zscore(feats_all)
 #    # 
     if 'data' in vars():
         if np.sum(np.isnan(data)) or np.sum(np.isnan(data)):print('Warning! NaNs detected')
@@ -108,7 +110,7 @@ if __name__ == "__main__":
 #    batch_size = 512
 #    feats_seq, target_seq, group_seq = tools.to_sequences(feats_all, target, groups=groups, seqlen = 6, tolist=False)
 #    r = keras_utils.cv(feats_seq, target_seq, group_seq, models.pure_rnn_do, epochs=250, folds=5, batch_size=batch_size, name='RNN',
-#                                    counter=counter, plot=True, stop_after=15, balanced=True)
+#                                    counter=counter, plot=True, stop_after=15, balanced=False)
 #    results.update(r)
 #    with open('results_recurrent', 'wb') as f:
 #                pickle.dump(results, f)
@@ -131,16 +133,21 @@ if __name__ == "__main__":
     #s
     batch_size = 256
     epochs = 250
-    name = 'CNN+LSTM'
+    name = 'LSTM moreL2'
     ###
     rnn = {'model':models.pure_rnn_do, 'layers': ['fc1'],  'seqlen':6,
            'epochs': 250,  'batch_size': 512,  'stop_after':15, 'balanced':False}
     print(rnn)
+    data = data[:12000]
+    target = target[:12000]
+    groups = groups[:12000]
 #    model = 'C:\\Users\\Simon\\dropbox\\Uni\\Masterthesis\\AutoSleepScorer\\weights\\balanced'
-    model = models.cnn3adam_filter_l2
-    r = keras_utils.cv (data, target, groups, model, rnn, name=name,
+    model = models.cnn3adam_filter_morel2
+    r = keras_utils.cv (data, target, groups, model, rnn=rnn,trans_tuple=trans_tuple, name=name,
                              epochs=epochs, folds=5, batch_size=batch_size, counter=counter,
                              plot=True, stop_after=15, balanced=False, cropsize=2800)
     results.update(r)
-    with open('results_recurrent_test', 'wb') as f:
+    with open('results_recurrejsuttestingnt_morel2.pkl', 'wb') as f:
                 pickle.dump(results, f)
+    telegram_send.send(parse_mode='Markdown',messages=['DONE {} {}\n```\n{}\n```\n'.format(os.path.basename(__file__),name, tools.print_string(results))])
+            

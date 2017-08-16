@@ -264,7 +264,7 @@ class SleepDataset(object):
         labels = []
         picks = []
         for ch in self.channels:
-            if self.channels[ch] not in channels:
+            if self.channels[ch].upper() not in channels:
                 raise ValueError('ERROR: Channel {} for {} not found in {}\navailable channels: {}'.format(self.channels[ch], ch, filename, channels))
             else:
                 picks.append(channels.index(self.channels[ch]))

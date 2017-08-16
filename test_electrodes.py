@@ -53,7 +53,7 @@ if __name__ == '__main__':
         sleep.load_object()
     
         data, target, groups = sleep.get_all_data(groups=True)
-        data    = tools.normalize(data , groups=groups)
+        data    = tools.normalize(data)
         
         target[target==4] = 3
         target[target==5] = 4
@@ -67,23 +67,18 @@ if __name__ == '__main__':
 #    import stopping
     print('Extracting features')
 
-    feats_eeg = tools.feat_eeg(data[:,:,0])
-    feats_emg = tools.feat_emg(data[:,:,1])
-    feats_eog = tools.feat_eog(data[:,:,2])
+#    feats_eeg = tools.feat_eeg(data[:,:,0])
+#    feats_emg = tools.feat_emg(data[:,:,1])
+#    feats_eog = tools.feat_eog(data[:,:,2])
+#
+#    np.save('target.npy')
+#    np.save('groups.npy')
+#    np.save('feats_eeg.npy')
+#    np.save('feats_eog.npy')
+#    np.save('feats_emg.npy')
 
-    np.save('target.npy')
-    np.save('groups.npy')
-    np.save('feats_eeg.npy')
-    np.save('feats_eog.npy')
-    np.save('feats_emg.npy')
-
-    feats_all = np.hstack([feats_eeg, feats_emg, feats_eog])
-    
-    # 
-    if 'data' in vars():
-        if np.any(np.isnan(data)) or np.any(np.isnan(data)):print('Warning! NaNs detected')
-    
-    #%%
+#    feats_all = np.hstack([feats_eeg, feats_emg, feats_eog])
+#%%
 #    print("starting")
 #    comment = 'testing_electrodes for feat'
 #    print(comment)
@@ -103,15 +98,15 @@ if __name__ == '__main__':
     batch_size = 256
     #
     cropsize = 2800
-#    r = cv(data[:,:,0:1],   target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'eeg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)
-#    results.update(r)
-    r = cv(data[:,:,[0,1]], target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'eeg+emg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
+    r = cv(data[:,:,0:1],   target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'eeg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)
     results.update(r)
-    r = cv(data[:,:,[0,2]],   target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'eeg+eog', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)  
+    r = cv(data[:,:,[0,1]], target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'eeg+emg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
     results.update(r)
-    r = cv(data[:,:,:],     target, groups, models.cnn3adam_filter_l2, epochs=epochs, name = 'all', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
+    r = cv(data[:,:,[0,2]], target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'eeg+eog', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)  
     results.update(r)
-    with open('results_electrodes.pkl', 'wb') as f:
+    r = cv(data[:,:,:],     target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'all', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
+    results.update(r)
+    with open('results_electrodes_morel2.pkl', 'wb') as f:
                 pickle.dump(results, f)
     
     

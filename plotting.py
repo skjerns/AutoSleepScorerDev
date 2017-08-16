@@ -15,11 +15,11 @@ fsize = np.array((4,3.5))
 
 #%%
 
-pkl = pickle.load(open('.\\results\\new_results_electrodes_cnn.pkl', 'rb'))
+pkl = pickle.load(open('.\\results\\results_recurrent_', 'rb'))
 t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
 for key in pkl:
     confmat = [x[4] for x in pkl[key]]
-    tools.plot_confusion_matrix ('recurrent_newest'+ key + '.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='')
+    tools.plot_confusion_matrix ('dataset_'+ key + '.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title=key)
 
 pkl = pickle.load(open('.\\results\\results_recurrent_seqlen-rnn6.pkl', 'rb'))
 #pkl['feat-LSTM'] = pkl.pop('pure_rnn_do_6')
@@ -27,64 +27,98 @@ confmat = [x[4] for x in pkl[list(pkl.keys())[0]]]
 tools.plot_confusion_matrix ('recurrent_'+ key +'_newest.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='Feat-LSTM')
 
 
-pkl = pickle.load(open('.\\1098_cnn3adam_filter_SS_cnnnobal_results.pkl', 'rb'))
+pkl = pickle.load(open('.\\results_recurrent_morel2.pkl', 'rb'))
 t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
 for key in pkl:
-    confmat = [x[4] for x in pkl[key]]
+    confmat =  pkl[key][4]
 #    plt.close('all')
-    tools.plot_confusion_matrix ('cropping'+ key + '.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True,cmap=cmap, title='NewData {}'.format(key))
+    tools.plot_confusion_matrix ('transfer_'+ key + '.png',confmat, t_label,figsize=fsize, perc=True,cmap=cmap, title=key)
+#%% electrodes best plot
+pkl = pickle.load(open('.\\results\\results_electrodes_morel2.pkl', 'rb'))
+pkl.update(pickle.load(open('.\\results\\new_results_electrodes_feat.pkl', 'rb')))
+t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
+confmat = [x[4] for x in pkl['annall']]
+tools.plot_confusion_matrix ('confmat_ann.pdf',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, cbar=False)
+confmat = [x[4] for x in pkl['cnn3morel2 all']]
+tools.plot_confusion_matrix ('confmat_cnn.pdf',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap)
 
 
 #%% Differenceplot
 
-pkl = pickle.load(open('.\\results\\new_results_electrodes_cnn.pkl', 'rb'))
+pkl = pickle.load(open('.\\results\\results_electrodes_morel2.pkl', 'rb'))
 pkl.update(pickle.load(open('.\\results\\new_results_electrodes_feat.pkl', 'rb')))
 
 t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
 
-cnn_eeg = np.mean([x[4] for x in pkl['cnn3l2 eeg']], 0)
-cnn_eog = np.mean([x[4] for x in pkl['cnn3l2 eog']], 0)
-cnn_emg = np.mean([x[4] for x in pkl['cnn3l2 emg']], 0)
-cnn_all = np.mean([x[4] for x in pkl['cnn3l2 all']], 0)
+cnn_eeg = np.mean([x[4] for x in pkl['cnn3morel2 eeg']], 0)
+cnn_eog = np.mean([x[4] for x in pkl['cnn3morel2 eog']], 0)
+cnn_emg = np.mean([x[4] for x in pkl['cnn3morel2 emg']], 0)
+cnn_all = np.mean([x[4] for x in pkl['cnn3morel2 all']], 0)
 
 ann_eeg = np.mean([x[4] for x in pkl['anneeg']], 0)
 ann_eog = np.mean([x[4] for x in pkl['anneeg+eog']], 0)
 ann_emg = np.mean([x[4] for x in pkl['anneeg+emg']], 0)
 ann_all = np.mean([x[4] for x in pkl['annall']], 0)
 
-tools.plot_difference_matrix('cnn-all-vs-eeg.png', cnn_eeg, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG')
-tools.plot_difference_matrix('cnn-all-vs-eog.png', cnn_eog, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EOG')
-tools.plot_difference_matrix('cnn-all-vs-emg.png', cnn_emg, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EMG')
+tools.plot_difference_matrix('cnn-all-vs-eeg.pdf', cnn_eeg, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG', cbar=False)
+tools.plot_difference_matrix('cnn-all-vs-eog.pdf', cnn_eog, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EOG')
+tools.plot_difference_matrix('cnn-all-vs-emg.pdf', cnn_emg, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EMG', cbar=False)
 
-tools.plot_difference_matrix('ann-all-vs-eeg.png', ann_eeg, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG')
-tools.plot_difference_matrix('ann-all-vs-eog.png', ann_eog, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EOG')
-tools.plot_difference_matrix('ann-all-vs-emg.png', ann_emg, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EMG')
+tools.plot_difference_matrix('ann-all-vs-eeg.pdf', ann_eeg, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG', cbar=False)
+tools.plot_difference_matrix('ann-all-vs-eog.pdf', ann_eog, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EOG')
+tools.plot_difference_matrix('ann-all-vs-emg.pdf', ann_emg, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EMG', cbar=False)
 
 
 #%%
+t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
+
 pkl = pickle.load(open('.\\results\\new_results_recurrent.pkl', 'rb'))
 rec_ann = np.mean([x[4] for x in pkl['pure_rnn_do']], 0)
-rec_cnn = np.mean([x[4] for x in pkl['CNN+LSTM_fc1']], 0)
-tools.plot_confusion_matrix ('cnn+lstm.png', rec_cnn, t_label,figsize=fsize, perc=True, cmap=cmap, title='CNN+LSTM')
-tools.plot_confusion_matrix ('feat-lstm.png', rec_ann, t_label,figsize=fsize, perc=True, cmap=cmap, title='Feat-LSTM')
+pkl = pickle.load(open('.\\results\\results_recurrent_morel2.pkl', 'rb'))
+rec_cnn = np.mean([x[4] for x in pkl['LSTM moreL2_fc1']], 0)
 
-tools.plot_difference_matrix('rec-ann-vs-cnn.png', rec_ann, rec_cnn , t_label,figsize=fsize, perc=True, title='feat-LSTM minus CNN+LSTM')
+tools.plot_confusion_matrix ('conf_feat-lstm.pdf', rec_ann, t_label,figsize=fsize, perc=True, cmap=cmap, title='', cbar=False)
+tools.plot_confusion_matrix ('conf_cnn+lstm.pdf', rec_cnn, t_label,figsize=fsize, perc=True, cmap=cmap, title='')
+
+tools.plot_difference_matrix('diff-cnn-lstm.pdf', rec_ann, rec_cnn , t_label,figsize=fsize, perc=True, title='')
 
 plt.close('all')
-
-#tools.plot_difference_matrix('cnn-eeg-vs-eog.png', cnn_eeg, cnn_eog, target,figsize=fsize, perc=True, title='CNN EOG minus EEG')
-#tools.plot_difference_matrix('cnn-eeg-vs-emg.png', cnn_eeg, cnn_emg, target,figsize=fsize, perc=True, title='CNN EMG minus EEG')
-#tools.plot_difference_matrix('cnn-eeg-vs-all.png', cnn_eeg, cnn_all, target,figsize=fsize, perc=True, title='CNN all minus EEG')
-#tools.plot_difference_matrix('ann-eeg-vs-eog.png', ann_eeg, ann_eog, target,figsize=fsize, perc=True, title='ANN EOG minus EEG')
-#tools.plot_difference_matrix('ann-eeg-vs-emg.png', ann_eeg, ann_emg, target,figsize=fsize, perc=True, title='ANN EMG minus EEG')
-#tools.plot_difference_matrix('ann-eeg-vs-all.png', ann_eeg, ann_all, target,figsize=fsize, perc=True, title='ANN all minus EEG')
-#tools.plot_difference_matrix('cnn-vs-ann.png', ann_all, cnn_all, target,figsize=fsize, perc=True, title='CNN all minus ANN all')
 
 #for key in pkl:
 #    confmat = pkl[key]]
 #    plt.close('all')
 #    
 #    tools.plot_confusion_matrix ('recurrent_'+ key + '.eps',np.mean(confmat,0), target, perc=True)
+#%%
+
+pkl = pickle.load(open('.\\results\\results_recurrent_emsa', 'rb'))
+confmat = [x[4] for x in pkl[list(pkl)[0]]]
+tools.plot_confusion_matrix ('dataset_'+ key + '.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='EMSA')
+
+t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
+for key in pkl:
+    confmat = pkl[key][4]
+    tools.plot_confusion_matrix ('dataset_'+ key + '.png',confmat, t_label,figsize=fsize, perc=True, cmap=cmap, title=key)
+
+
+
+#%% Datasets
+pkl = pickle.load(open('.\\results\\results_recurrent_emsa', 'rb'))
+confmat = [x[4] for x in pkl[list(pkl)[0]]]
+tools.plot_confusion_matrix ('dataset_emsa.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='EMSAad')
+
+pkl = pickle.load(open('.\\results\\results_recurrent_edfx', 'rb'))
+confmat = [x[4] for x in pkl[list(pkl)[0]]]
+tools.plot_confusion_matrix ('dataset_edfx.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='Sleep-EDFx')
+
+pkl = pickle.load(open('.\\results\\results_recurrent_vinc', 'rb'))
+confmat = [x[4] for x in pkl[list(pkl)[0]]]
+tools.plot_confusion_matrix ('dataset_vinc.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='UCD')
+
+pkl = pickle.load(open('.\\results\\results_recurrent_cshs100', 'rb'))
+confmat = [x[4] for x in pkl[list(pkl)[0]]]
+tools.plot_confusion_matrix ('dataset_cshs100.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='CCSHS100')
+
 #%% Plots for presentation cnn
 
 plt.figure(figsize=[8,3])

@@ -13,6 +13,7 @@ import os.path
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import prettytable
 from multiprocessing import Pool, cpu_count
 from scipy import fft
 from scipy import stats
@@ -20,6 +21,7 @@ from scipy.signal import butter, lfilter
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.utils import shuffle
 from sklearn.metrics import f1_score, accuracy_score
+from copy import deepcopy
 import json
 import os
 import re
@@ -43,7 +45,7 @@ def plot_signal(data1,data2):
                 self.ax.cla()
                 self.ax.plot(self.data1[self.pos,:,0])
                 self.ax.plot(self.data2[self.pos,:,0])
-                self.ax.set_ylim([-1000,1000])
+                self.ax.set_ylim([-30,30])
                 plt.title(self.pos)
                 self.fig.canvas.draw()
                 
@@ -159,19 +161,25 @@ def label_to_one_hot(y):
 
 
 
-def normalize(signals, groups=None, MP = False):
+def normalize(signals, axis=None, groups=None, MP = False, comp=None):
     """
     :param signals: 1D, 2D or 3D signals
     returns zscored per patient
     """
+    
+    if comp is not None:
+        print('zmapping with axis {}'.format(axis))
+        return stats.zmap(signals, comp , axis=axis)
+    
+    if groups is None: 
+        print('zscoring with axis {}'.format(axis))
+        return stats.zscore(signals, axis=axis)
+    
     if signals.ndim == 1: signals = np.expand_dims(signals,0) 
     if signals.ndim == 2: signals = np.expand_dims(signals,2)
-
-    if groups is None: 
-        print('Normalizing over whole dataset')
-        return stats.zscore(signals, axis=None)
+    
     if MP:
-        print('Normalizing per patient using {} cores'.format(cpu_count()))
+        print('zscoring per patient using {} cores'.format(cpu_count()))
         p = Pool(cpu_count()) #use all except for one
         res = []
         new_signals = np.zeros_like(signals)
@@ -187,7 +195,7 @@ def normalize(signals, groups=None, MP = False):
             end = start
         return new_signals
     else:
-        print('Normalizing per patient')
+        print('zscoring per patient')
         res = []
         for ID in np.unique(groups):
             idx = groups==ID
@@ -362,7 +370,7 @@ def feat_emgmedianfreq(signals):
 def get_all_features(data):
     """
     returns a vector with extraced features
-    :param data: datapoints x samples x dimensions (dimensions: EEG,EOG,EMG)
+    :param data: datapoints x samples x dimensions (dimensions: EEG,EMG, EOG)
     """
     eeg = feat_eeg(data[:,:,0])
     emg = feat_emg(data[:,:,1])
@@ -373,7 +381,7 @@ def get_all_features(data):
 def get_all_features_m(data):
     """
     returns a vector with extraced features
-    :param data: datapoints x samples x dimensions (dimensions: EEG,EOG,EMG)
+    :param data: datapoints x samples x dimensions (dimensions: EEG,EMG, EOG)
     """
     p = Pool(3)
     t1 = p.apply_async(feat_eeg,(data[:,:,0],))
@@ -431,6 +439,9 @@ def append_json(json_filename, dic):
 def plot_confusion_matrix(fname, conf_mat, target_names, 
                           title='', cmap='Blues', perc=True,figsize=(6,5),cbar=True):
     """Plot Confusion Matrix."""
+    figsize = deepcopy(figsize)
+    if cbar == False:
+        figsize[0] = figsize[0] - 0.6
     c_names = []
     r_names = []
     if len(target_names) != len(conf_mat):
@@ -461,9 +472,12 @@ def plot_confusion_matrix(fname, conf_mat, target_names,
 
 
 def plot_difference_matrix(fname, confmat1, confmat2, target_names, 
-                          title='', cmap='Blues', perc=True,figsize=(5,4),**kwargs):
+                          title='', cmap='Blues', perc=True,figsize=[5,4],cbar=True,
+                          **kwargs):
     """Plot Confusion Matrix."""
-
+    figsize = deepcopy(figsize)
+    if cbar == False:
+        figsize[0] = figsize[0] - 0.6
     
     cm1 = confmat1
     cm2 = confmat2
@@ -476,7 +490,7 @@ def plot_difference_matrix(fname, confmat1, confmat2, target_names,
     plt.figure(figsize=figsize)
     g  = sns.heatmap(df, annot=cm, fmt=".1f" ,
                      linewidths=.5, vmin=-10, vmax=10, 
-                     cmap='coolwarm_r',annot_kws={"size": 13},**kwargs)#sns.diverging_palette(20, 220, as_cmap=True))    
+                     cmap='coolwarm_r',annot_kws={"size": 13},cbar=cbar,**kwargs)#sns.diverging_palette(20, 220, as_cmap=True))    
     g.set_title(title)
     g.set_ylabel('True sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
     g.set_xlabel('Predicted sleep stage',fontdict={'fontsize' : 12, 'fontweight':'bold'})
@@ -511,8 +525,10 @@ def plot_results_per_patient(predictions, targets, groups, title='Results per Pa
     if fname is not '':
         title = title + '\nMean Acc: {:.1f} mean F1: {:.1f}'.format(accuracy_score(targets, predictions)*100,f1_score(targets,predictions, average='macro')*100)
     plt.title(title)
+#    plt.tight_layout()
     if fname!='':
         plt.savefig(os.path.join('plots', fname))
+    return(accs,f1s)
 
 def plot_hypnogram(stages, labels=None):
     if labels is None:
@@ -616,7 +632,47 @@ def get_freqs (signals, nbins=0):
     return feats
 
 
-#print ('loaded tools.py')
-    
+def print_string(results_dict):
+    """ 
+    creates an easy printable string from a results dict
+    """
+    max_hlen = 42
+    hlen  =  7 + len('  '.join(list(results_dict)))
+    maxlen = (max_hlen-7) //  len(results_dict) -2
+    table = prettytable.PrettyTable(header=True, vrules=prettytable.NONE)
+    table.border = False
+    table.padding_width = 1
+    cv = True if  type(results_dict[list(results_dict.keys())[0]][0]) is list else False
+    if cv:
+        table.add_column('', ['VAcc', 'V-F1', 'TAcc', 'T-F1'])
+    else:
+        table.add_column('', ['CAcc', 'C-F1', 'RAcc', 'R-F1'])
 
-    
+    for exp in results_dict:
+        res = results_dict[exp]
+        scores = []
+        if cv:
+            for fold in res:
+                scores.append(fold[:4])
+            scores = np.mean(scores,0)
+        else:
+            scores = np.array([res[0],res[1],res[2],res[3]])
+        table.add_column(exp[0:maxlen] if hlen > max_hlen else exp,['{:.1f}%'.format(x*100) for x in scores])
+    return table.get_string()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

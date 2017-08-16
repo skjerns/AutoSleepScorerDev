@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os, sys, re
+import os, sys
 import time
 import keras
 import tools
@@ -14,8 +14,10 @@ from sklearn.model_selection import GroupKFold
 from tensorflow.python.client import device_lib
 import tensorflow as tf
 from tqdm import tqdm
+import warnings
 from keras.layers.core import Lambda
-from sklearn.utils import class_weight
+
+
 #%%
 print('##################################################')
 print('##################################################')
@@ -92,7 +94,7 @@ def make_parallel(model, gpu_count=-1):
     
     
 
-def get_activations(model, data, layer, batch_size=256, flatten=True, cropsize=0):
+def get_activations(model, data, layer, batch_size=256, flatten=True, cropsize=0, verbose=0):
 #    get_layer_output = K.function([model.layers[0].input, K.learning_phase()],
 #                                      [model.layers[layername].output if type(layername) is type(int) else model.get_layer(layername).output])
 #    
@@ -103,14 +105,14 @@ def get_activations(model, data, layer, batch_size=256, flatten=True, cropsize=0
     else:
         layerindex = layer
         layername  = None   
-    print (layername, layerindex)
+#    print (layername, layerindex)
     
     get_layer_output = K.function([model.layers[0].input, K.learning_phase()],
                                   [model.get_layer(name=layername, index=layerindex).output])
 
     activations = []
     batch_size = int(batch_size)
-    for i in tqdm(range(int(np.ceil(len(data)/batch_size))), desc='Feature extraction'):
+    for i in tqdm(range(int(np.ceil(len(data)/batch_size))), desc='Feature extraction') if verbose==1 else range(int(np.ceil(len(data)/batch_size))):
         batch = np.array(data[i*batch_size:(i+1)*batch_size], dtype=np.float32)
         if cropsize!=0:
             diff = (batch.shape[1]-cropsize)//2
@@ -121,13 +123,11 @@ def get_activations(model, data, layer, batch_size=256, flatten=True, cropsize=0
     if flatten: activations = activations.reshape([len(activations),-1])
     return activations
 
-def train_models(data, targets, groups):
+def train_models(data, targets, groups,model=None, cropsize=2800, batch_size=512, epochs=250, epochs_to_stop=15,rnn_epochs_to_stop=15):
     """
     trains a cnn3adam_filter_l2 model with a LSTM on top on 
     the given data with 20% validation set and returns the two models
     """
-    batch_size = 512
-    cropsize = 2800
     input_shape = list((np.array(data[0])).shape) #train_data.shape
     input_shape[0] = cropsize
     n_classes = targets.shape[1]
@@ -138,12 +138,12 @@ def train_models(data, targets, groups):
     val_data     = [data[i] for i in val_idx]
     val_target   = targets[val_idx]
     val_groups   = groups[val_idx]
-    model = models.cnn3adam_filter_l2(input_shape, n_classes)
+    model = models.cnn3adam_filter_l2(input_shape, n_classes) if model is None else model(input_shape, n_classes)
     g_train= generator(train_data, train_target, batch_size, val=False, cropsize=cropsize)
     g_val  = generator(val_data, val_target, batch_size, val=True, cropsize=cropsize)
     cb  = Checkpoint_balanced(g_val, verbose=1, groups=val_groups,
-                              epochs_to_stop=15, plot = True, name = '{}, {}'.format(model.name, 'testing'))
-    model.fit_generator(g_train, g_train.n_batches, epochs=250, callbacks=[cb], max_queue_size=1, verbose=0)
+                              epochs_to_stop=epochs_to_stop, plot = True, name = '{}, {}'.format(model.name, 'testing'))
+    model.fit_generator(g_train, g_train.n_batches, epochs=epochs, callbacks=[cb], max_queue_size=1, verbose=0)
     val_acc = cb.best_acc
     val_f1  = cb.best_f1
     print('CNN Val acc: {:.1f}, Val F1: {:.1f}'.format(val_acc*100, val_f1*100))
@@ -152,8 +152,8 @@ def train_models(data, targets, groups):
     rnn_modelfun = models.pure_rnn_do
     lname = 'fc1'
     seq = 6
-    rnn_epochs = 250
-    stopafter_rnn = 15
+    rnn_epochs = epochs
+    stopafter_rnn = rnn_epochs_to_stop
     features = get_activations(model, train_data + val_data, lname, batch_size*2, cropsize=cropsize)
     train_data_extracted = features[0:len(train_data)]
     val_data_extracted   = features[len(train_data):]
@@ -176,23 +176,89 @@ def train_models(data, targets, groups):
     return model, rnn_model
     
     
-    
-    
-
-def test_data_cnn(data, target, model):
+def train_models_feat(data, targets, groups, batch_size=512, epochs=250, epochs_to_stop=15):
     """
-    take a model and predict on the data
+    trains a ann and rnn model with features
+    the given data with 20% validation set and returns the two models
     """
+    batch_size = 512
+    input_shape = list((np.array(data[0])).shape) #train_data.shape
+    n_classes = targets.shape[1]
+    train_idx, val_idx = GroupKFold(5).split(groups,groups,groups).__next__()
+    train_data   = [data[i] for i in train_idx]
+    train_target = targets[train_idx]
+    train_groups = groups[train_idx]
+    val_data     = [data[i] for i in val_idx]
+    val_target   = targets[val_idx]
+    val_groups   = groups[val_idx]
+    model = models.ann(input_shape, n_classes)
+    g_train= generator(train_data, train_target, batch_size, val=False)
+    g_val  = generator(val_data, val_target, batch_size, val=True)
+    cb  = Checkpoint_balanced(g_val, verbose=1, groups=val_groups,
+                              epochs_to_stop=epochs_to_stop, plot = True, name = '{}, {}'.format(model.name, 'testing'))
+    model.fit_generator(g_train, g_train.n_batches, epochs=epochs, callbacks=[cb], max_queue_size=1, verbose=0)
+    val_acc = cb.best_acc
+    val_f1  = cb.best_f1
+    print('CNN Val acc: {:.1f}, Val F1: {:.1f}'.format(val_acc*100, val_f1*100))
     
-    predictions = model.predict_classes(data)
-    cnn_acc = accuracy_score(np.argmax(target,1),predictions)
-    cnn_f1  = f1_score(np.argmax(target,1),predictions, average='macro')
-    confmat = confusion_matrix(np.argmax(target,1),predictions)
+    # LSTM training
+    batch_size = 512
+    n_classes = targets.shape[1]
+    train_idx, val_idx = GroupKFold(5).split(groups,groups,groups).__next__()
+    train_data   = np.array([data[i] for i in train_idx])
+    train_target = targets[train_idx]
+    train_groups = groups[train_idx]
+    val_data     = np.array([data[i] for i in val_idx])
+    val_target   = targets[val_idx]
+    val_groups   = groups[val_idx]
+    
+    train_data_seq, train_target_seq, train_groups_seq = tools.to_sequences(train_data, train_target, groups=train_groups, seqlen=6)
+    val_data_seq, val_target_seq, val_groups_seq        = tools.to_sequences(val_data, val_target, groups=val_groups, seqlen=6)
+    
+    input_shape = list((np.array(train_data_seq[0])).shape) #train_data.shape
+    print(input_shape)
+    rnn_model = models.pure_rnn_do(input_shape, n_classes)
+    
+    g_train = generator(train_data_seq, train_target_seq, batch_size, val=False)
+    g_val   = generator(val_data_seq, val_target_seq, batch_size, val=True)
+    cb  = Checkpoint_balanced(g_val, verbose=1, groups=val_groups_seq,
+                              epochs_to_stop=epochs_to_stop, plot = True, name = '{}, {}'.format(rnn_model.name, 'testing'))
+    rnn_model.fit_generator(g_train, g_train.n_batches, epochs=epochs, callbacks=[cb], max_queue_size=1, verbose=0)
+    val_acc = cb.best_acc
+    val_f1  = cb.best_f1
+    print('CNN Val acc: {:.1f}, Val F1: {:.1f}'.format(val_acc*100, val_f1*100))
+    
+    
 
-    return cnn_acc, cnn_f1, confmat
+    return model, rnn_model   
+    
+
+def test_data_ann_rnn(feats, target, groups, ann, rnn):
+    """
+    mode = 'scores' or 'preds'
+    take two ready trained models (cnn+rnn)
+    test on input data and return acc+f1
+    """
+    if target.ndim==2: target = np.argmax(target,1)
+
+        
+
+    cnn_pred = ann.predict_classes(feats, 1024, verbose=0)
+
+    cnn_acc = accuracy_score(target, cnn_pred)
+    cnn_f1  = f1_score(target, cnn_pred, average='macro')
+    
+    seqlen = rnn.input_shape[1]
+    features_seq, target_seq, groups_seq = tools.to_sequences(feats, target, seqlen=seqlen, groups=groups)
+    new_targ_seq = np.roll(target_seq, 4)
+    rnn_pred = rnn.predict_classes(features_seq, 1024, verbose=0)
+    rnn_acc = accuracy_score(new_targ_seq, rnn_pred)
+    rnn_f1  = f1_score(new_targ_seq,rnn_pred, average='macro')
+    confmat = confusion_matrix(new_targ_seq, rnn_pred)
+    return [cnn_acc, cnn_f1, rnn_acc, rnn_f1, confmat, (rnn_pred, target_seq, groups_seq)]
 
 
-def test_data_cnn_rnn(data, target, cnn, layername, rnn, cropsize=0, mode = 'scores'):
+def test_data_cnn_rnn(data, target, groups, cnn, rnn, layername='fc1', cropsize=2800, verbose=1):
     """
     mode = 'scores' or 'preds'
     take two ready trained models (cnn+rnn)
@@ -202,23 +268,26 @@ def test_data_cnn_rnn(data, target, cnn, layername, rnn, cropsize=0, mode = 'sco
     if cropsize != 0: 
         diff = (data.shape[1] - cropsize)//2
         data = data[:,diff:-diff:,:]
-    features = get_activations(cnn, data, layername)
-    cnn_pred = get_activations(cnn, data, -1)
+        
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cnn_pred = cnn.predict_classes(data, 1024,verbose=0)
+        features = get_activations(cnn, data, 'fc1', verbose=verbose)
+    
+        cnn_acc = accuracy_score(target, cnn_pred)
+        cnn_f1  = f1_score(target, cnn_pred, average='macro')
+        
+        seqlen = rnn.input_shape[1]
+        features_seq, target_seq, groups_seq = tools.to_sequences(features, target, seqlen=seqlen, groups=groups)
+        new_targ_seq = np.roll(target_seq, 4)
+        rnn_pred = rnn.predict_classes(features_seq, 1024, verbose=0)
+        rnn_acc = accuracy_score(new_targ_seq, rnn_pred)
+        rnn_f1  = f1_score(new_targ_seq,rnn_pred, average='macro')
+        confmat = confusion_matrix(new_targ_seq, rnn_pred)
+   
+    return [cnn_acc, cnn_f1, rnn_acc, rnn_f1, confmat, (rnn_pred, target_seq, groups_seq)]
 
-    cnn_acc = accuracy_score(target,np.argmax(cnn_pred,1))
-    cnn_f1  = f1_score(target,np.argmax(cnn_pred,1), average='macro')
-    
-    seqlen = rnn.input_shape[1]
-    features_seq, target_seq = tools.to_sequences(features, target, seqlen=seqlen)
-    results = get_activations(rnn, features_seq, -1)
-    
-    rnn_acc = accuracy_score(target_seq,np.argmax(results,1))
-    rnn_f1  = f1_score(target_seq,np.argmax(results,1), average='macro')
-    if mode=='scores':
-        return (cnn_acc, cnn_f1, rnn_acc, rnn_f1)
-    elif mode=='preds':
-        print('CNN acc: {:.1f} CNN f1: {:.1f} LSTM acc: {:.1f} LSTM f1: {:.1f}'.format(cnn_acc*100,cnn_f1*100,rnn_acc*100,rnn_f1*100))
-        return (cnn_pred, results, target, target_seq)
+
 
 
 #%%
@@ -343,11 +412,14 @@ class Checkpoint_balanced(keras.callbacks.Callback):
         
     def on_train_end(self, logs={}):
         self.model.set_weights(self.best_weights)
+        try: self.model.save('copy.model')
+        except Exception: print('could not save model')
         if self.verbose > 0: print(' {:.1f} min'.format((time.time()-self.start)/60), flush=True)
-        filename ='{}_{}_{}.png'.format(self.counter, self.name, self.model.name)
-        filename = ''.join([x if x not in ',;\\/:><|?*\"' else '_' for x in filename])
-        try: plt.savefig(os.path.join('.','plots', filename ))
-        except Exception as e:print('can\'t save plots: {}'.format(e))
+        if self.plot:
+            filename ='{}_{}_{}.png'.format(self.counter, self.name, self.model.name)
+            filename = ''.join([x if x not in ',;\\/:><|?*\"' else '_' for x in filename])
+            try: plt.savefig(os.path.join('.','plots', filename ))
+            except Exception as e:print('can\'t save plots: {}'.format(e))
 #        try:
 #            self.model.save(os.path.join('.','weights', str(self.counter) + self.model.name))
 #        except Exception as error:
@@ -567,9 +639,8 @@ class generator(object):
             return (x_batch,y_batch) 
         
 #%%
-
-def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size=256,
-       val_batch_size=0, stop_after=0, name='', counter=0, plot = True, balanced=False, cropsize=0):
+def cv(data, targets, groups, modfun, rnn=False, trans_tuple=None, epochs=250, folds=5, batch_size=256,
+       val_batch_size=0, stop_after=0, name='', counter=0, plot = False, balanced=False, cropsize=0):
     """
     Crossvalidation routinge for an RNN using extracted features on a basemodel
     :param rnns: list with the following:
@@ -639,6 +710,8 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
         
         if modfun: model.fit_generator(g, g.n_batches, epochs=epochs, callbacks=[cb], max_queue_size=1, verbose=0)
         
+
+        
         y_pred = model.predict_generator(g_test, g_test.n_batches, max_queue_size=1)
         y_true = g_test.Y
         val_acc = cb.best_acc
@@ -663,7 +736,16 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
             try: model.save(os.path.join('.','weights', str(counter) + name + model.name + '_' + str(i) + "_{:.3f}-{:.3f}".format(test_acc,test_f1)))
             except Exception as error:  print("Got an error while saving model: {}".format(error))
         print('ANN results: val acc/f1: {:.5f}/{:.5f}, test acc/f1: {:.5f}/{:.5f}'.format(cb.best_acc, cb.best_f1, test_acc, test_f1))
-
+        ##########
+        if trans_tuple is not None:
+            trans_data,trans_target,trans_groups = trans_tuple
+            g_trans = generator(trans_data, trans_target, batch_size*2, val=True, cropsize=cropsize)
+            y_trans = model.predict_generator(g_trans, g_trans.n_batches, max_queue_size=1)
+            t_trans = g_trans.Y
+            trans_acc = accuracy_score(np.argmax(t_trans,1),np.argmax(y_trans,1))
+            trans_f1  = f1_score(np.argmax(t_trans,1),np.argmax(y_trans,1), average="macro")
+            print('Transfer ANN results: acc/f1: {:.5f}/{:.5f}'.format( trans_acc, trans_f1))
+        ##########
         if rnn:
             rnn_modelfun = rnn['model'] 
             layernames = rnn['layers']
@@ -683,7 +765,7 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
                 test_data_seq, test_target_seq, test_groups_seq    = tools.to_sequences(test_data_extracted,  test_target, groups=test_groups, seqlen=seq)
              
                 rnn_shape  = list((np.array(train_data_seq[0])).shape)
-                neurons = int(np.sqrt(rnn_shape[-1])*4)
+                neurons = 100
                 print('Starting RNN model with input from layer {}: {} at {}'.format(lname, rnn_shape, time.ctime()))
                 rnn_model  = rnn_modelfun(rnn_shape, n_classes, layers=2, neurons=neurons, dropout=0.3)
                 
@@ -722,7 +804,18 @@ def cv(data, targets, groups, modfun, rnn=False, epochs=250, folds=5, batch_size
                         plt.pause(0.0001)
                 results[name + '_' + lname].append([val_acc, val_f1, test_acc, test_f1, confmat])
                 print('fold {}: val acc/f1: {:.5f}/{:.5f}, test acc/f1: {:.5f}/{:.5f}'.format(i,cb.best_acc, cb.best_f1, test_acc, test_f1))
-
+                ##########
+                if trans_tuple is not None:
+                    trans_data,trans_target,trans_groups = trans_tuple
+                    extracted = get_activations(model, trans_data, lname, batch_size*2, cropsize=cropsize)
+                    trans_data, trans_target,trans_groups = tools.to_sequences(extracted, trans_target, groups=trans_groups, seqlen=seq)
+                    g_trans = generator(trans_data, trans_target, batch_size*2, val=True, cropsize=0)
+                    y_trans = rnn_model.predict_generator(g_trans, g_trans.n_batches, max_queue_size=1)
+                    t_trans = g_trans.Y
+                    trans_acc = accuracy_score(np.argmax(t_trans,1),np.argmax(y_trans,1))
+                    trans_f1  = f1_score(np.argmax(t_trans,1),np.argmax(y_trans,1), average="macro")
+                    print('Transfer LSTM results: acc/f1: {:.5f}/{:.5f}'.format( trans_acc, trans_f1))
+                ##########
             save_dict = {'1 Number':counter,
                          '2 Time':time.ctime(),
                          '3 CV':'{}/{}.'.format(i+1, folds),
