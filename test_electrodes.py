@@ -41,7 +41,7 @@ if __name__ == '__main__':
     else:
         datadir = 'c:\\sleep\\data\\'
     #    datadir = 'C:\\sleep\\vinc\\brainvision\\correct\\'
-        datadir = 'c:\\sleep\\cshs50\\'
+        datadir = 'c:\\sleep\\vinc\\'
     
     def load_data():
         global sleep
@@ -98,16 +98,16 @@ if __name__ == '__main__':
     batch_size = 256
     #
     cropsize = 2800
-    r = cv(data[:,:,0:1],   target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'eeg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)
-    results.update(r)
-    r = cv(data[:,:,[0,1]], target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'eeg+emg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
-    results.update(r)
-    r = cv(data[:,:,[0,2]], target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'eeg+eog', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)  
-    results.update(r)
-    r = cv(data[:,:,:],     target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'all', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
-    results.update(r)
-    with open('results_electrodes_morel2.pkl', 'wb') as f:
-                pickle.dump(results, f)
+#    r = cv(data[:,:,0:1],   target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'eeg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)
+#    results.update(r)
+##    r = cv(data[:,:,[0,1]], target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'eeg+emg', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize) 
+#    results.update(r)
+#    r = cv(data[:,:,[0,2]], target, groups, models.cnn3adam_filter_morel2, epochs=epochs, name = 'eeg+eog', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize)  
+#    results.update(r)
+    r = cv(data[:,:,:],     target, groups, models.cnn3dilated, epochs=epochs, name = 'all', stop_after=15, counter=counter,batch_size=batch_size, cropsize=cropsize, balanced=True) 
+#    results.update(r)
+#    with open('results_electrodes_morel2.pkl', 'wb') as f:
+#                pickle.dump(results, f)
     
     
 

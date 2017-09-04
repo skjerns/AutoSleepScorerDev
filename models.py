@@ -15,8 +15,53 @@ from keras.layers import MaxPooling2D, Conv2D, Conv1D, MaxPooling1D
 from keras.optimizers import Adadelta, RMSprop, Adam
 input_shape=[3000,1]
 n_classes=5
-#m=cnn3adam(input_shape,n_classes)
 #%%
+def cnn3dilated(input_shape, n_classes):
+    """
+    Input size should be [batch, 1d, 2d, ch] = (None, 3000, 3)
+    """
+
+    model = Sequential(name='cnn3adam')
+    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=1, padding='valid', input_shape=input_shape, kernel_initializer='he_normal', activation='relu')) 
+    model.add(Dropout(0.2))
+    print(model.output_shape)
+    
+    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=2, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(Dropout(0.2))
+    print(model.output_shape)
+    
+    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=4, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(Dropout(0.2))
+    print(model.output_shape)
+    
+    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=8, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(MaxPooling1D())
+    model.add(Dropout(0.2))
+    print(model.output_shape)
+    
+    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=16, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(Dropout(0.2))
+    model.add(MaxPooling1D())
+    print(model.output_shape)
+    
+    model.add(Conv1D(kernel_size = (5), filters = 64, dilation_rate=32, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(Dropout(0.2))
+    model.add(MaxPooling1D())
+    print(model.output_shape)
+    
+    
+    model.add(Flatten())
+    model.add(Dense (512, activation='relu', kernel_initializer='he_normal'))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.5))
+    model.add(Dense (512, activation='relu', kernel_initializer='he_normal'))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.5))
+    model.add(Dense(n_classes, activation = 'softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam())
+    return model
+m=cnn3dilated(input_shape,n_classes)
+
 
 def cnn3adam_slim(input_shape, n_classes):
     """

@@ -12,8 +12,10 @@ import numpy as np
 import os.path
 import pandas as pd
 import seaborn as sns
+import matplotlib
 import matplotlib.pyplot as plt
 import prettytable
+import time
 from multiprocessing import Pool, cpu_count
 from scipy import fft
 from scipy import stats
@@ -506,6 +508,7 @@ def plot_results_per_patient(predictions, targets, groups, title='Results per Pa
     accs = []
     if predictions.ndim == 2: predictions = np.argmax(predictions,1)
     if targets.ndim == 2: targets = np.argmax(targets,1)
+    statechanges = []
     for ID in IDs:
         y_true = targets [groups==ID]
         y_pred = predictions[groups==ID]
@@ -513,6 +516,7 @@ def plot_results_per_patient(predictions, targets, groups, title='Results per Pa
         acc = accuracy_score(y_true, y_pred)
         f1s.append(f1)
         accs.append(acc)
+        statechanges.append(np.sum(0!=y_true-np.roll(y_true,1))-1)
     if fname != '':plt.figure()
 
     plt.plot(f1s,'go')
@@ -528,9 +532,11 @@ def plot_results_per_patient(predictions, targets, groups, title='Results per Pa
 #    plt.tight_layout()
     if fname!='':
         plt.savefig(os.path.join('plots', fname))
-    return(accs,f1s)
+    return (accs,f1s, statechanges)
 
-def plot_hypnogram(stages, labels=None):
+
+
+def plot_hypnogram(stages, labels=None, title='', ax1=None, **kwargs):
     if labels is None:
         if np.max(stages)==4:
             print('assuming 0=W, 1=S1, 2=S2, 3=SWS, 4=REM')
@@ -546,7 +552,7 @@ def plot_hypnogram(stages, labels=None):
     x = []
     y = []
     for i in np.arange(len(stages)):
-        s = stages[i][0]
+        s = stages[i]
         if labels_dict[s]=='W':   p = -0
         if labels_dict[s]=='REM': p = -1
         if labels_dict[s]=='S1':  p = -2
@@ -555,13 +561,25 @@ def plot_hypnogram(stages, labels=None):
         if labels_dict[s]=='S3': p = -4
         if labels_dict[s]=='S4': p = -5
         if i!=0:
-            x.append(p)
-            y.append(i-1)   
-        x.append(p)
-        y.append(i)   
-
-    plt.plot(y,x)
-    plt.yticks([0,-1,-2,-3,-4,-5], ['W','REM', 'S1', 'S2', 'S3', 'S4' ])
+            y.append(p)
+            x.append(i-1)   
+        y.append(p)
+        x.append(i)
+        
+    x = np.array(x)*30
+    y = np.array(y)
+    if ax1 is None:
+        fig = plt.figure(figsize=[8,2])
+        ax1 = fig.add_subplot(111)
+    formatter = matplotlib.ticker.FuncFormatter(lambda s, x: time.strftime('%H:%M', time.gmtime(s)))
+    ax1.xaxis.set_major_formatter(formatter)
+    ax1.plot(x,y, **kwargs)
+    plt.yticks([0,-1,-2,-3,-4,-5], ['W','REM', 'S1', 'S2', 'SWS' ])
+    plt.xticks(np.arange(0,x[-1],3600))
+    plt.xlabel('Time after lights-off')
+    plt.ylabel('Sleep Stage')
+    plt.title(title)
+    plt.tight_layout()
 
 
 

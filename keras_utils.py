@@ -258,7 +258,7 @@ def test_data_ann_rnn(feats, target, groups, ann, rnn):
     return [cnn_acc, cnn_f1, rnn_acc, rnn_f1, confmat, (rnn_pred, target_seq, groups_seq)]
 
 
-def test_data_cnn_rnn(data, target, groups, cnn, rnn, layername='fc1', cropsize=2800, verbose=1):
+def test_data_cnn_rnn(data, target, groups, cnn, rnn, layername='fc1', cropsize=2800, verbose=1, only_lstm = False):
     """
     mode = 'scores' or 'preds'
     take two ready trained models (cnn+rnn)
@@ -271,7 +271,10 @@ def test_data_cnn_rnn(data, target, groups, cnn, rnn, layername='fc1', cropsize=
         
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        cnn_pred = cnn.predict_classes(data, 1024,verbose=0)
+        if only_lstm == False:
+            cnn_pred = cnn.predict_classes(data, 1024,verbose=0)
+        else:
+            cnn_pred = target
         features = get_activations(cnn, data, 'fc1', verbose=verbose)
     
         cnn_acc = accuracy_score(target, cnn_pred)

@@ -9,6 +9,8 @@ import pickle
 import numpy as np
 import seaborn as sns
 import re
+import sdill as dill
+from sklearn.metrics import f1_score
 import tools
 cmap = sns.cubehelix_palette(8, start=2.8, rot=-.1, as_cmap=True)
 fsize = np.array((4,3.5))
@@ -60,13 +62,13 @@ ann_eog = np.mean([x[4] for x in pkl['anneeg+eog']], 0)
 ann_emg = np.mean([x[4] for x in pkl['anneeg+emg']], 0)
 ann_all = np.mean([x[4] for x in pkl['annall']], 0)
 
-tools.plot_difference_matrix('cnn-all-vs-eeg.pdf', cnn_eeg, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG', cbar=False)
-tools.plot_difference_matrix('cnn-all-vs-eog.pdf', cnn_eog, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EOG')
-tools.plot_difference_matrix('cnn-all-vs-emg.pdf', cnn_emg, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EMG', cbar=False)
+tools.plot_difference_matrix('cnn_eeg.pdf', cnn_eeg, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG')
+tools.plot_difference_matrix('cnn_eog.pdf', cnn_eog, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EOG')
+tools.plot_difference_matrix('cnn_emg.pdf', cnn_emg, cnn_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EMG')
 
-tools.plot_difference_matrix('ann-all-vs-eeg.pdf', ann_eeg, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG', cbar=False)
-tools.plot_difference_matrix('ann-all-vs-eog.pdf', ann_eog, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EOG')
-tools.plot_difference_matrix('ann-all-vs-emg.pdf', ann_emg, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EMG', cbar=False)
+tools.plot_difference_matrix('ann_eeg.pdf', ann_eeg, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG', cbar=False)
+tools.plot_difference_matrix('ann_eog.pdf', ann_eog, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EOG', cbar=False)
+tools.plot_difference_matrix('ann_emg.pdf', ann_emg, ann_all, t_label,figsize=fsize, perc=True, title='EEG+EMG+EOG minus EEG+EMG', cbar=False)
 
 
 #%%
@@ -104,20 +106,89 @@ for key in pkl:
 
 #%% Datasets
 pkl = pickle.load(open('.\\results\\results_recurrent_emsa', 'rb'))
-confmat = [x[4] for x in pkl[list(pkl)[0]]]
-tools.plot_confusion_matrix ('dataset_emsa.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='EMSAad')
+confmat = [x[4] for x in pkl[list(pkl)[1]]]
+tools.plot_confusion_matrix ('dataset_emsaad.pdf',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='EMSAad')
+
+pkl = pickle.load(open('.\\results\\results_dataset_emsach.pkl', 'rb'))
+confmat = [x[4] for x in pkl[list(pkl)[1]]]
+tools.plot_confusion_matrix ('dataset_emsach.pdf',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='EMSAch')
 
 pkl = pickle.load(open('.\\results\\results_recurrent_edfx', 'rb'))
-confmat = [x[4] for x in pkl[list(pkl)[0]]]
-tools.plot_confusion_matrix ('dataset_edfx.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='Sleep-EDFx')
+confmat = [x[4] for x in pkl[list(pkl)[1]]]
+tools.plot_confusion_matrix ('dataset_edfx.pdf',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='Sleep-EDFx')
 
 pkl = pickle.load(open('.\\results\\results_recurrent_vinc', 'rb'))
-confmat = [x[4] for x in pkl[list(pkl)[0]]]
-tools.plot_confusion_matrix ('dataset_vinc.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='UCD')
+confmat = [x[4] for x in pkl[list(pkl)[1]]]
+tools.plot_confusion_matrix ('dataset_vinc.pdf',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='UCD')
 
-pkl = pickle.load(open('.\\results\\results_recurrent_cshs100', 'rb'))
-confmat = [x[4] for x in pkl[list(pkl)[0]]]
-tools.plot_confusion_matrix ('dataset_cshs100.png',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='CCSHS100')
+
+#pkl = pickle.load(open('.\\results\\results_recurrent_cshs100', 'rb'))
+#confmat = [x[4] for x in pkl[list(pkl)[0]]]
+#tools.plot_confusion_matrix ('dataset_cshs100.pdf',np.mean(confmat,0), t_label,figsize=fsize, perc=True, cmap=cmap, title='CCSHS100')
+
+#%% Transfer confmats
+pkl = pickle.load(open('.\\results_transfer_cshs50_cshs50', 'rb'))
+t_label = ['W', 'S1', 'S2', 'SWS', 'REM']
+
+key = 'cshs100'
+confmat = pkl[key][4]
+tools.plot_confusion_matrix ('transfer_cshs50_{}.pdf'.format(key),confmat, t_label,figsize=fsize, perc=True, cmap=cmap, title='CCSHS100')
+
+key = 'edfx'
+confmat = pkl[key][4]
+tools.plot_confusion_matrix ('transfer_cshs50_{}.pdf'.format(key),confmat, t_label,figsize=fsize, perc=True, cmap=cmap, title='Sleep-EDFx')
+
+
+key = 'emsaad'
+confmat = pkl[key][4]
+tools.plot_confusion_matrix ('transfer_cshs50_{}.pdf'.format(key),confmat, t_label,figsize=fsize, perc=True, cmap=cmap, title='EMSAad')
+
+key = 'emsach'
+confmat = pkl[key][4]
+tools.plot_confusion_matrix ('transfer_cshs50_{}.pdf'.format(key),confmat, t_label,figsize=fsize, perc=True, cmap=cmap, title='EMSAch')
+
+key = 'vinc'
+confmat = pkl[key][4]
+tools.plot_confusion_matrix ('transfer_cshs50_{}.pdf'.format(key),confmat, t_label,figsize=fsize, perc=True, cmap=cmap, title='UCD')
+
+key = 'vinc_scaled'
+confmat = pkl[key][4]
+tools.plot_confusion_matrix ('transfer_cshs50_{}.pdf'.format(key),confmat, t_label,figsize=fsize, perc=True, cmap=cmap, title='UCD z-scored')
+
+#%% hypnograms
+
+pkl = pickle.load(open('.\\results_transfer_cshs50_cshs50', 'rb'))
+pred, targ, _ = pkl['cshs100'][5]
+targ = np.roll(targ,4)
+sub_pred = pred[5390:6560]
+sub_targ = targ[5390:6560]
+acc = np.mean(sub_targ==sub_pred)
+f1 = f1_score(sub_targ, sub_pred, average='macro')
+
+plt.figure(figsize=[8,3])
+ax = plt.subplot(111)
+tools.plot_hypnogram(sub_pred, c ='orangered', title='Ground Truth',ax1=ax)
+tools.plot_hypnogram(sub_targ, c='royalblue', title='Prediction', ax1=ax, linewidth=1.9)
+plt.legend(['Human Scorer','CNN+LSTM'], loc='lower right')
+#plt.savefig('./plots/hypnogram_truth.pdf')
+plt.savefig('./plots/hypnogram_prediction.pdf')
+
+#%% distribution of predictions
+
+preds = dill.load('predictions.pkl')
+prob = preds['cnn_pred']
+targ = preds['cnn_target']
+pred = np.argmax(prob,1)
+
+correct = np.max(prob[targ==pred],1)
+wrong   =  np.max(prob[targ!=pred],1)
+
+plt.subplot(1,2,1)
+sns.distplot(correct,bins=200);
+plt.title('Correct')
+plt.subplot(1,2,2)
+sns.distplot(wrong);
+plt.title('Wrong')
 
 #%% Plots for presentation cnn
 
