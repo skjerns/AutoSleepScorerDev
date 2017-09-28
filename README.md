@@ -1,4 +1,4 @@
-# AutoSleepScorer
+# AutoSleepScorerDev
 Please find the package here https://github.com/skjerns/AutoSleepScorer
 
 
