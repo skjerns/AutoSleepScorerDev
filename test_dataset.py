@@ -51,7 +51,7 @@ if __name__ == '__main__':
         target[target==4] = 3
         target[target==5] = 4
         target[target==6] = 0
-        target[target==8] = 0
+        target[target==9] = 0
         
         target = keras.utils.to_categorical(target)
         return data, target, groups
@@ -60,18 +60,22 @@ if __name__ == '__main__':
 
     #%%
     #s
+#    data = data[:15000]
+#    target = target[:15000]
+#    groups = groups[:15000]
+    
     batch_size = 256
-    epochs = 250
+    epochs = 256
     name =  dataset
     ###
-    rnn = {'model':models.pure_rnn_do, 'layers': ['fc1'],  'seqlen':6,
+    rnn = {'model':models.bi_lstm, 'layers': ['fc1'],  'seqlen':6,
            'epochs': 250,  'batch_size': 512,  'stop_after':15, 'balanced':False}
     print(rnn)
-    model = models.cnn3dilated
-    results = keras_utils.cv (data, target, groups, model, rnn=False, name=name,
-                             epochs=epochs, folds=5, batch_size=batch_size, counter=counter,
+    model = models.cnn3adam_filter_morel2
+    results = keras_utils.cv (data, target, groups, model, rnn=rnn, name=name,
+                             epochs=epochs, folds=3, batch_size=batch_size, counter=counter,
                              plot=plot, stop_after=15, balanced=False, cropsize=2800)
-    with open('results_dataset_dilated_{}.pkl'.format(dataset), 'wb') as f:
+    with open('results_dataset_{}.pkl'.format(dataset), 'wb') as f:
                 pickle.dump(results, f)
 
 #    telegram_send.send(parse_mode='Markdown',messages=['DONE {}  {} \n```\n{}\n```\n'.format(os.path.basename(__file__), dataset, tools.print_string(results))])

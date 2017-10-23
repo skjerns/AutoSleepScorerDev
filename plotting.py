@@ -35,6 +35,7 @@ for key in pkl:
     confmat =  pkl[key][4]
 #    plt.close('all')
     tools.plot_confusion_matrix ('transfer_'+ key + '.png',confmat, t_label,figsize=fsize, perc=True,cmap=cmap, title=key)
+
 #%% electrodes best plot
 pkl = pickle.load(open('.\\results\\results_electrodes_morel2.pkl', 'rb'))
 pkl.update(pickle.load(open('.\\results\\new_results_electrodes_feat.pkl', 'rb')))
@@ -180,15 +181,38 @@ prob = preds['cnn_pred']
 targ = preds['cnn_target']
 pred = np.argmax(prob,1)
 
-correct = np.max(prob[targ==pred],1)
-wrong   =  np.max(prob[targ!=pred],1)
+sorted_pred = np.fliplr(prob.argsort())
+#overall = np.mean((sorted_pred[:,0]==targ) | (sorted_pred[:,1]==targ) )
 
-plt.subplot(1,2,1)
-sns.distplot(correct,bins=200);
-plt.title('Correct')
-plt.subplot(1,2,2)
-sns.distplot(wrong);
-plt.title('Wrong')
+#correct = np.max(prob[targ==pred],1)
+#wrong   = np.max(prob[targ!=pred],1)
+#
+#plt.subplot(1,2,1)
+#sns.distplot(correct,bins=200);
+#plt.title('Correct')
+#plt.subplot(1,2,2)
+#sns.distplot(wrong);
+#plt.title('Wrong')
+#
+
+
+for i in range(5):
+    idx = pred==i
+    stage_prob = prob[idx]
+    stage_pred = pred[idx]
+    stage_targ = targ[idx]
+    correct = np.max(stage_prob[stage_targ==stage_pred],1)
+    wrong   = np.max(stage_prob[stage_targ!=stage_pred],1)
+    plt.subplot(3,2,i+1)
+    sns.distplot(correct, hist=True, kde=False, bins=20);
+    plt.ylim([0,400])
+    plt.xlim([0,1])
+#    plt.subplot(5,2,i*2+2)
+    sns.distplot(wrong, hist=True, kde=False, color='r', bins=20);
+    plt.title(' Stage {}'.format(i))
+    plt.legend(['True', 'Predicted'])
+    plt.ylim([0,400])
+    plt.xlim([0,1])
 
 #%% Plots for presentation cnn
 

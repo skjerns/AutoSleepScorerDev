@@ -7,19 +7,12 @@ Created on Fri Jul 28 14:15:31 2017
 
 
 
-import os
-male = 0
-female = 0
-trainset= 'cssdf'
-normmode='asd'
-edfs =[s for s in os.listdir('D:/sleep/edfx') if s.endswith('.edf')]
-for edf in edfs:
-    with open('D:/sleep/edfx/' + edf, 'rb') as f:
-        a = str(f.readline()[:30])
-        if 'Male' in a:
-            male+=1
-        elif 'Female' in a:
-            female+=1
-        else :
-            print(a)
-print()
+import sleeploader
+import imp
+imp.reload(sleeploader)
+if __name__=='__main__':
+    sleep = sleeploader.SleepDataset('D:/sleep/mass/ss3')
+    sleep.load(channels={'EEG':['EEG C3-CLE','EEG C3-LER'], 'EMG':'EMG CHIN2', 'EOG':'EOG RIGHT HORIZ'},
+                   references={'RefEEG':['EEG A2-CLE','EEG A2-LER', 'EEG T4-LER'], 'RefEMG':'EMG CHIN1', 'RefEOG':'EOG LEFT HORIZ'})
+    sleep.save_object()
+
