@@ -412,7 +412,7 @@ class Checkpoint_balanced(keras.callbacks.Callback):
             plt.pause(0.0001)
         if self.verbose == 2:
             print('Epoch {}: , current: {:.1f}/{:.1f}, best: {:.1f}/{:.1f}'.format(epoch, acc*100, f1*100, self.best_acc*100 , self.best_f1*100))
-        
+            
     def on_train_end(self, logs={}):
         self.model.set_weights(self.best_weights)
         try: self.model.save('copy.model')
@@ -648,7 +648,12 @@ def cv(data, targets, groups, modfun, rnn=False, trans_tuple=None, epochs=250, f
     Crossvalidation routinge for an RNN using extracted features on a basemodel
     :param rnns: list with the following:
                  [rnnfun, [layernames], seqlen, batch_size]
-    :param ...: should be self-explanatory
+    :param stop_after: stop after x epochs without f1-improvement. 0 for no stopping
+    :param plot: True for plotting intermediate results and loss
+    :param counter: prefix for saving files. can be any number.
+    :param balanced: True if the generator should supply class-balanced batches
+    :param cropsize: Size that is randomly cropped for training (data augmentation)
+    :param ...: all others should be self-explanatory
 
     :returns results: dictionary with all RNN results
     """

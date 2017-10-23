@@ -54,7 +54,7 @@ class SleepDataset(object):
     
 #        if not data_header.info['lowpass'] == 50:
 #            print('WARNING: lowpass not at 50')
-        if not self.channels['EEG'] in channels:
+        if (not self.channels['EEG'] in channels) and  not np.any(([ch in channels for ch in self.channels['EEG']])):
             print('WARNING: EEG channel missing')    
         if not self.channels['EMG'] in channels:
             print('WARNING: EMG channel missing')
@@ -63,11 +63,11 @@ class SleepDataset(object):
 
 
         if self.references['RefEEG'] and not self.references['RefEEG'] in channels:
-            print('WARNING: EEG channel missing')
+            print('WARNING: RefEEG channel missing')
         if self.references['RefEMG'] and not self.references['RefEMG'] in channels:
-            print('WARNING: EMG channel missing')
+            print('WARNING: RefEMG channel missing')
         if self.references['RefEOG'] and not self.references['RefEOG'] in channels:
-            print('WARNING: EOG channel missing')
+            print('WARNING: RefEOG channel missing')
 
 
         
@@ -81,7 +81,8 @@ class SleepDataset(object):
         """
         
         h = {'0':0, '1':1, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9,
-             'W':0, 'S1':1, 'S2':2, 'S3':3, 'S4':4, 'SWS':3, 'REM':5, 'A':6, 'M':8}
+             'W':0, 'S1':1, 'S2':2, 'S3':3, 'S4':4, 'SWS':3, 'REM':5, 'R':5,
+             'A':6, 'M':8, '?':9}
         
         dataformats = dict({
                             'txt' :'csv',
@@ -264,18 +265,43 @@ class SleepDataset(object):
         labels = []
         picks = []
         for ch in self.channels:
-            if self.channels[ch].upper() not in channels:
-                raise ValueError('ERROR: Channel {} for {} not found in {}\navailable channels: {}'.format(self.channels[ch], ch, filename, channels))
+            ch_pick = self.channels[ch]
+            if type(ch_pick) is list:
+                found = False
+                for c in ch_pick: 
+                    if c in channels: 
+                        found = True
+                        ch_pick = c
+                        break
+                if found == False:   raise ValueError('ERROR: Channel {} for {} not found in {}\navailable channels: {}'.format(self.channels[ch], ch, filename, channels))
             else:
-                picks.append(channels.index(self.channels[ch]))
-                labels.append(ch)
+                if self.channels[ch].upper() not in channels:  raise ValueError('ERROR: Channel {} for {} not found in {}\navailable channels: {}'.format(self.channels[ch], ch, filename, channels))
+            picks.append(channels.index(ch_pick.upper()))
+            labels.append(ch)
+            
         for ch in self.references:
-            if not self.references[ch]:continue
-            if self.references[ch] not in channels:
-                raise ValueError('ERROR: Channel {} for {} not found in {}\navailable channels: {}'.format(self.references[ch], ch, filename, channels))
+            if not self.references[ch]: continue
+            ch_pick = self.references[ch]
+            if type(ch_pick) is list:
+                found = False
+                for c in ch_pick: 
+                    if c in channels: 
+                        found = True
+                        ch_pick = c
+                        break
+                if found == False:   raise ValueError('ERROR: RefChannel {} for {} not found in {}\navailable channels: {}'.format(self.references[ch], ch, filename, channels))
             else:
-                picks.append(channels.index(self.references[ch]))
-                labels.append(ch)
+                if (self.references[ch].upper() not in channels):  raise ValueError('ERROR: RefChannel {} for {} not found in {}\navailable channels: {}'.format(self.references[ch], ch, filename, channels))
+            picks.append(channels.index(ch_pick.upper()))
+            labels.append(ch)
+            
+#        for ch in self.references:
+#            if not self.references[ch]:continue
+#            if self.references[ch] not in channels:
+#                raise ValueError('ERROR: Channel {} for {} not found in {}\navailable channels: {}'.format(self.references[ch], ch, filename, channels))
+#            else:
+#                picks.append(channels.index(self.references[ch]))
+#                labels.append(ch)
         return (picks, labels)
     
     
@@ -326,6 +352,7 @@ class SleepDataset(object):
         """
         restores a previously stored SleepData object
         """
+        if self.data[0].dtype != self.dtype: self.data = [x.astype(self.dtype) for x in self.data]
         if not filename [-4:] == '.pkl': filename = filename + '.pkl'
         if path == None: path = self.directory
         print('Saving data at {}'.format(filename))
@@ -346,6 +373,7 @@ class SleepDataset(object):
         self.tqdmloop.refresh()
         
     def _print(self, statement):
+        if 'WARNING' in  statement and self.verbose==0: return
         if self.tqdmloop:
             self.tqdmloop.write(str(statement))
             self.tqdmloop.refresh()
@@ -353,7 +381,7 @@ class SleepDataset(object):
             print(statement)
 
 
-    def load_eeg_hypno(self, eeg_file, hypno_file, chuck_size = 3000, resampling = True, mode = 'standard', pool=False):
+    def load_eeg_hypno(self, eeg_file, hypno_file, epoch_len = 3000, resampling = True, mode = 'standard', pool=False):
         """
         :param filename: loads the given eeg file
         :param mode: mode fro loading hypno-file
@@ -406,12 +434,14 @@ class SleepDataset(object):
                 self._print ('Not resampling')
         self._progress('Loading')
         signal = np.stack([eeg,emg,eog]).swapaxes(0,1)
-        hypno_len = len(hypno)
-        eeg_len   = len(signal)
-#        print('length: hypno {} eeg {}'.format(hypno_len, eeg_len))
-        epoch_len = int(eeg_len / hypno_len / self.sfreq) 
-        self.samples_per_epoch = int(epoch_len * self.sfreq) 
-        trunc_len = (len(signal)//self.samples_per_epoch)*self.samples_per_epoch
+        trunc_len = len(signal) - len(signal)%3000
+#        hypno_len = len(hypno)
+#        eeg_len   = len(signal)
+#        if epoch_len is None: epoch_len = int(eeg_len / hypno_len / self.sfreq) 
+#        print('length: hypno {} eeg {}, epochlen {}, flaot {}'.format(hypno_len, eeg_len, epoch_len,eeg_len / hypno_len / self.sfreq))
+#
+        self.samples_per_epoch = int(epoch_len) 
+#        trunc_len = (len(signal)//self.samples_per_epoch)*self.samples_per_epoch
         signal = signal[:trunc_len]     # remove left over to ensure len(data)%3000==0
         
         return signal.astype(self.dtype), hypno
@@ -470,7 +500,7 @@ class SleepDataset(object):
             if len(sub) % self.chunk_len == 0:
                 eeg.append(sub.reshape([-1, self.chunk_len,3]))
             else:
-                print('ERROR: Please choose a chunk length that is a factor of {}'.format(self.samples_per_epoch))
+                print('ERROR: Please choose a chunk length that is a factor of {}. Current len = {}'.format(self.samples_per_epoch, len(sub)))
                 return [0,0]
         hypno = list()
         group = list()
@@ -488,7 +518,7 @@ class SleepDataset(object):
        
         
     def load(self, sel = [], channels = None, references = None, resampling = True, chunk_len = 3000, 
-             flat = None, force_reload = False, shuffle = False, dtype=np.float32):
+             flat = None, force_reload = False, shuffle = False, dtype=np.float32, verbose=1):
         """
         :param sel:          np.array with indices of files to load from the directory. Natural sorting.
         :param channels:     dict with form 'EEG':'channel_name', which channel to use for which modality (EEG,EMG,EOG). If none, will try to infer automatically
@@ -498,6 +528,7 @@ class SleepDataset(object):
         :param flat:         select if data will be returned in a flat array or a list per subject
         :param flat:         select if data will be returned in a flat array or a list per subject
         """
+        self.verbose=verbose
         if channels is not None: self.channels = channels
         if references is not None: self.references = references
 
@@ -527,7 +558,7 @@ class SleepDataset(object):
         self.rng = random.RandomState(seed=23)
     
         # check hypno_filenames
-        self.hypno_files = [s for s in os.listdir(self.directory) if s.endswith('.txt')]
+        self.hypno_files = [s for s in os.listdir(self.directory) if (s.endswith('.txt') or s.endswith('.csv'))]
         self.hypno_files = sorted(self.hypno_files, key = natural_key)
 
         # check eeg_filenames
@@ -552,7 +583,7 @@ class SleepDataset(object):
                 if(len(eeg) != len(curr_hypno) * self.samples_per_epoch):
                     self._print('WARNING: EEG epochs and Hypno epochs have different length {}:{} in {}.'.format(len(eeg),len(curr_hypno)* self.samples_per_epoch,self.eeg_files[i]))
                     if len(eeg) > len(curr_hypno) * self.samples_per_epoch:
-                        self._print('Truncating EEG')
+                        self._print('WARNING: Truncating EEG')
                         eeg = eeg[:len(curr_hypno) * self.samples_per_epoch]
                 self.data.append(eeg)
                 self.hypno.append(curr_hypno)

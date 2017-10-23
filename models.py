@@ -10,7 +10,7 @@ import keras
 import keras.backend.tensorflow_backend as K
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, BatchNormalization, Activation
-from keras.layers import LSTM, Reshape,Permute, TimeDistributed
+from keras.layers import LSTM, Reshape,Permute, TimeDistributed, Bidirectional
 from keras.layers import MaxPooling2D, Conv2D, Conv1D, MaxPooling1D
 from keras.optimizers import Adadelta, RMSprop, Adam
 input_shape=[3000,1]
@@ -22,45 +22,48 @@ def cnn3dilated(input_shape, n_classes):
     """
 
     model = Sequential(name='cnn3adam')
-    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=1, padding='valid', input_shape=input_shape, kernel_initializer='he_normal', activation='relu')) 
+    model.add(Conv1D(kernel_size = (10), filters = 32, dilation_rate=2, padding='valid', input_shape=input_shape, kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.005))) 
     model.add(Dropout(0.2))
     print(model.output_shape)
     
-    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=2, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(Conv1D(kernel_size = (10), filters = 32, dilation_rate=4, padding='valid', kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.005))) 
     model.add(Dropout(0.2))
     print(model.output_shape)
     
-    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=4, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(Conv1D(kernel_size = (10), filters = 64, dilation_rate=8, padding='valid', kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.005))) 
     model.add(Dropout(0.2))
     print(model.output_shape)
     
-    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=8, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(Conv1D(kernel_size = (10), filters = 64, dilation_rate=16, padding='valid', kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.005))) 
     model.add(MaxPooling1D())
     model.add(Dropout(0.2))
     print(model.output_shape)
     
-    model.add(Conv1D(kernel_size = (5), filters = 32, dilation_rate=16, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(Conv1D(kernel_size = (10), filters = 64, dilation_rate=32, padding='valid', kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.005))) 
     model.add(Dropout(0.2))
-    model.add(MaxPooling1D())
     print(model.output_shape)
-    
-    model.add(Conv1D(kernel_size = (5), filters = 64, dilation_rate=32, padding='valid', kernel_initializer='he_normal', activation='relu')) 
+    model.add(Conv1D(kernel_size = (10), filters = 128, strides=2, padding='valid', kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.005))) 
+    model.add(Dropout(0.2))    
+    model.add(Conv1D(kernel_size = (10), filters = 128, strides=2, padding='valid', kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.005))) 
     model.add(Dropout(0.2))
-    model.add(MaxPooling1D())
+    model.add(Conv1D(kernel_size = (10), filters = 128, strides=2, padding='valid', kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.005))) 
+    model.add(Dropout(0.2))
+#    model.add(MaxPooling1D())
     print(model.output_shape)
-    
     
     model.add(Flatten())
-    model.add(Dense (512, activation='relu', kernel_initializer='he_normal'))
+    model.add(Dense (512, name='fc1', activation='relu', kernel_initializer='he_normal',kernel_regularizer=keras.regularizers.l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.5))
-    model.add(Dense (512, activation='relu', kernel_initializer='he_normal'))
+    model.add(Dense (512, activation='relu', kernel_initializer='he_normal',kernel_regularizer=keras.regularizers.l2(0.01)))
     model.add(BatchNormalization())
     model.add(Dropout(0.5))
     model.add(Dense(n_classes, activation = 'softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer=Adam())
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(lr=0.0001))
     return model
-m=cnn3dilated(input_shape,n_classes)
+
+
+
 
 
 def cnn3adam_slim(input_shape, n_classes):
@@ -218,6 +221,38 @@ def cnn3adam_filter_morel2(input_shape, n_classes):
     return model
 
 
+#print(m.summary())
+
+def cnn3adam_filter_morel2_slim(input_shape, n_classes):
+    """
+    Input size should be [batch, 1d, 2d, ch] = (None, 3000, 3)
+    """
+    model = Sequential(name='cnn3adam_filter_morel2_slim')
+    model.add(Conv1D (kernel_size = (50), filters = 128, strides=5, input_shape=input_shape, 
+                      kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.05))) 
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+
+    model.add(Conv1D (kernel_size = (5), filters = 128, strides=1, kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.01))) 
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+    model.add(MaxPooling1D())
+    model.add(Conv1D (kernel_size = (5), filters = 256, strides=2, kernel_initializer='he_normal', activation='relu',kernel_regularizer=keras.regularizers.l2(0.01))) 
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+    model.add(MaxPooling1D())
+    model.add(Flatten(name='conv3'))
+    model.add(Dense (512, activation='relu', kernel_initializer='he_normal',name='fc1'))
+    model.add(BatchNormalization(name='bn1'))
+    model.add(Dropout(0.5, name='do1'))
+    model.add(Dense (512, activation='relu', kernel_initializer='he_normal',name='fc2'))
+    model.add(BatchNormalization(name='bn2'))
+    model.add(Dropout(0.5, name='do2'))
+    model.add(Dense(n_classes, activation = 'softmax',name='softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(lr=0.0001))
+#    print('reset learning rate')
+    return model
+
 def ann(input_shape, n_classes, layers=2, neurons=80, dropout=0.35 ):
     """
     for working with extracted features
@@ -281,18 +316,25 @@ def pure_rnn_do(input_shape, n_classes,layers=2, neurons=80, dropout=0.3):
     model.compile(loss='categorical_crossentropy', optimizer=Adam(lr=0.0001), metrics=[keras.metrics.categorical_accuracy])
     return model
 
-def pure_rnn_do_l2(input_shape, n_classes,layers=2, neurons=80, dropout=0.3):
+
+
+
+
+def bi_lstm(input_shape, n_classes,layers=2, neurons=80, dropout=0.3):
     """
     just replace ANN by RNNs
     """
-    print('using LSTM+L2')
-    model = Sequential(name='pure_rnn_l2')
-    model.add(LSTM(neurons, return_sequences=False if layers==1 else True, kernel_regularizer=keras.regularizers.l2(0.001), input_shape=input_shape,dropout=dropout, recurrent_dropout=dropout))
+    model = Sequential(name='pure_rnn')
+    model.add(Bidirectional(LSTM(neurons, return_sequences=False if layers==1 else True, dropout=dropout, recurrent_dropout=dropout), input_shape=input_shape))
+    
+    model.add(LSTM(neurons, return_sequences=False if layers==1 else True, input_shape=input_shape,dropout=dropout, recurrent_dropout=dropout))
     for i in range(layers-1):
-        model.add(LSTM(neurons, return_sequences=False if i==layers-2 else True,kernel_regularizer=keras.regularizers.l2(0.001),dropout=dropout, recurrent_dropout=dropout))
+        model.add(Bidirectional(LSTM(neurons, return_sequences=False if i==layers-2 else True,dropout=dropout, recurrent_dropout=dropout)))
     model.add(Dense(n_classes, activation = 'softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer=Adam(lr=0.0005), metrics=[keras.metrics.categorical_accuracy])
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(lr=0.0001), metrics=[keras.metrics.categorical_accuracy])
     return model
+
+
 
 def pure_rnn_3(input_shape, n_classes):
     """
@@ -308,19 +350,19 @@ def pure_rnn_3(input_shape, n_classes):
 
 
 
-#%% training routine
+#%% 
 def tsinalis(input_shape, n_classes):
     """
     Input size should be [batch, 1d, 2d, ch] = (None, 1, 15000, 1)
     """
     model = Sequential(name='Tsinalis')
-    model.add(Conv2D (kernel_size = (1,200), filters = 20, input_shape=input_shape, activation='relu'))
+    model.add(Conv1D (kernel_size = (200), filters = 20, input_shape=input_shape, activation='relu'))
     print(model.input_shape)
     print(model.output_shape)
-    model.add(MaxPooling2D(pool_size = (1,20), strides=(1,10)))
+    model.add(MaxPooling1D(pool_size = (20), strides=(10)))
     print(model.output_shape)
-    model.add(Permute((3,2,1)))
-    print(model.output_shape)
+    model.add(keras.layers.core.Reshape([20,-1,1]))
+    print(model.output_shape)    
     model.add(Conv2D (kernel_size = (20,30), filters = 400, activation='relu'))
     print(model.output_shape)
     model.add(MaxPooling2D(pool_size = (1,10), strides=(1,2)))
@@ -329,11 +371,9 @@ def tsinalis(input_shape, n_classes):
     print(model.output_shape)
     model.add(Dense (500, activation='relu'))
     model.add(Dense (500, activation='relu'))
-    model.add(Dropout(0.3))
-    model.add(Dense(n_classes, activation = 'sigmoid'))
-    model.compile(loss='categorical_crossentropy', optimizer=Adadelta(), metrics=[keras.metrics.categorical_accuracy])
+    model.add(Dense(n_classes, activation = 'softmax',activity_regularizer=keras.regularizers.l2()  ))
+    model.compile( loss='categorical_crossentropy', optimizer=keras.optimizers.SGD(), metrics=[keras.metrics.categorical_accuracy])
     return model
-
 
 def cnn1d(input_shape, n_classes ):
     """
