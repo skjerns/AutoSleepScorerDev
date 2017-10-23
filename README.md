@@ -6,7 +6,7 @@ This repository contains all the files for training and preprocessing. It's more
 
 I have created a small script that trains a model using the EDFx-database: `run_sample.py`.
 
-###File description
+## File description
 
 |File Name   | Description   |
 |---|---|
