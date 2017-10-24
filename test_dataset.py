@@ -13,6 +13,7 @@ import keras
 import tools
 import time
 import models
+from scipy.stats.mstats import zscore
 import pickle
 #import telegram_send
 import keras_utils
@@ -48,10 +49,10 @@ if __name__ == '__main__':
         sleep.load_object(str(dataset))
         data, target, groups = sleep.get_all_data(groups=True)
         data = tools.normalize(data)
+#        data = zscore(data,1)
         target[target==4] = 3
         target[target==5] = 4
-        target[target==6] = 0
-        target[target==9] = 0
+        target[target>5] = 0
         
         target = keras.utils.to_categorical(target)
         return data, target, groups
@@ -73,9 +74,9 @@ if __name__ == '__main__':
     print(rnn)
     model = models.cnn3adam_filter_morel2
     results = keras_utils.cv (data, target, groups, model, rnn=rnn, name=name,
-                             epochs=epochs, folds=3, batch_size=batch_size, counter=counter,
-                             plot=plot, stop_after=15, balanced=False, cropsize=2800)
-    with open('results_dataset_{}.pkl'.format(dataset), 'wb') as f:
+                             epochs=epochs, folds=5, batch_size=batch_size, counter=counter,
+                             plot=plot, stop_after=25, balanced=False, cropsize=2800)
+    with open('results_dataset_{}_zscore.pkl'.format(dataset), 'wb') as f:
                 pickle.dump(results, f)
 
 #    telegram_send.send(parse_mode='Markdown',messages=['DONE {}  {} \n```\n{}\n```\n'.format(os.path.basename(__file__), dataset, tools.print_string(results))])

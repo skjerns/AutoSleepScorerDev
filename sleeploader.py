@@ -98,7 +98,7 @@ class SleepDataset(object):
                 lhypno = []
                 for row in reader:
                     if mode == 'standard':
-                        lhypno.append(h[row[0]])
+                        if len(row)>0:  lhypno.append(h[row[0]])
                         
                     elif mode == 'overwrite':
                         if int(row[1]) == 0:
@@ -265,6 +265,7 @@ class SleepDataset(object):
         labels = []
         picks = []
         for ch in self.channels:
+            if not self.channels[ch]: continue
             ch_pick = self.channels[ch]
             if type(ch_pick) is list:
                 found = False

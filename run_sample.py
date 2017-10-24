@@ -4,6 +4,7 @@ import sleeploader
 import keras
 import models
 import pickle
+import tools
 import keras_utils
 from scipy.stats.mstats import zscore
 import numpy as np
@@ -33,6 +34,7 @@ if __name__ == '__main__':
     # load data
     data, target, groups = sleep.get_all_data(groups=True)
     data = zscore(data,1)
+    data = tools.normalize(data)
     
     target[target==4] = 3  # Set S4 to S3
     target[target==5] = 4  # Set REM to now empty class 4

@@ -11,8 +11,10 @@ import sleeploader
 import imp
 imp.reload(sleeploader)
 if __name__=='__main__':
-    sleep = sleeploader.SleepDataset('D:/sleep/mass/ss3')
-    sleep.load(channels={'EEG':['EEG C3-CLE','EEG C3-LER'], 'EMG':'EMG CHIN2', 'EOG':'EOG RIGHT HORIZ'},
-                   references={'RefEEG':['EEG A2-CLE','EEG A2-LER', 'EEG T4-LER'], 'RefEMG':'EMG CHIN1', 'RefEOG':'EOG LEFT HORIZ'})
+    sleep = sleeploader.SleepDataset('D:/sleep/isruc')
+    channels = {'EEG':['C4-A1','C4-M1'], 'EMG':'X1','EOG':['LOC-A2','E1-M2']}
+    references = {'RefEEG':False, 'RefEMG':False,'RefEOG':False}
+
+    sleep.load(channels=channels)
     sleep.save_object()
 
