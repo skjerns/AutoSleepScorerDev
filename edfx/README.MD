@@ -4,6 +4,7 @@ This directory includes the hypnograms from the edfx-sleep database from [Physio
 
 
 The following conversion is used:
+
 | EDF | Numerical |
 |-----|-----------|
 | W | 0 |
