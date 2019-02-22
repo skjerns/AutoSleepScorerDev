@@ -91,7 +91,7 @@ def download_edfx(datadir):
         if os.path.isfile(os.path.join(datadir,record)):
             progressloop.set_postfix_str('File {} already exists.'.format(record))
             continue
-        urlretrieve('https://physionet.nlm.nih.gov/pn4/sleep-edfx/' + record, os.path.join(datadir, record))
+        urlretrieve('https://physionet.org/physiobank/database/sleep-edfx/sleep-cassette/' + record, os.path.join(datadir, record))
         received += os.path.getsize(os.path.join(datadir, record))
         progressloop.set_postfix_str('{:.0f}/{:.0f}MB'.format(received//1024/1024, 1868))
     return True
