@@ -2,19 +2,23 @@
 
 This directory includes the hypnograms from the edfx-sleep database from [Physionet](https://physionet.org/physiobank/database/sleep-edfx/sleep-cassette/)
 
-W = Wake
+W = 0
 
-1 = S1
+1 = 1
 
-2 = S2
+2 = 2
 
-3 = S3 / SWS
+S3 = 3
 
-4 = S4 / SWS
+S4 = 4
 
-R = REM
+R = 5
 
-? = Unkown
+A = 6
+
+M = 7
+
+? = 9
 
 
-Use the file [edfx_database.py](../edfx_database.py) to truncate the extensive pre- and post sleep Wake intervals
+Use the file [convert_edfx_database.py](./convert_edfx_database.py) to truncate the extensive pre- and post sleep Wake intervals
