@@ -6,7 +6,8 @@ import mne
 import pickle as cPickle
 import numpy as np
 import numpy.random as random
-from tools import shuffle, butter_bandpass_filter
+from tools import butter_bandpass_filter
+from sklearn.utils import shuffle
 from multiprocessing import Pool
 from tqdm import trange
 from copy import deepcopy
@@ -24,7 +25,8 @@ class SleepDataset(object):
         """
         :param directory: a directory string
         """
-        if not os.path.isdir(directory): raise FileNotFoundError( 'Director {} not found'.format(directory))
+        if not os.path.isdir(directory): 
+            raise FileNotFoundError( 'Director {} not found'.format(directory))
         self.resample = False
         self.available_channels = []
         self.data = list()
@@ -556,14 +558,14 @@ class SleepDataset(object):
         self.data = list()
         self.hypno = list()  
         self.selection = sel    
-        self.rng = random.RandomState(seed=23)
+        #self.rng = random.RandomState(seed=23)
     
         # check hypno_filenames
         self.hypno_files = [s for s in os.listdir(self.directory) if (s.endswith('.txt') or s.endswith('.csv'))]
         self.hypno_files = sorted(self.hypno_files, key = natural_key)
 
         # check eeg_filenames
-        self.eeg_files = [s for s in os.listdir(self.directory) if s.endswith(('.vhdr', 'edf'))]
+        self.eeg_files = [s for s in os.listdir(self.directory) if (s.endswith(('.vhdr', 'edf')) and (not 'hypno' in s.lower()))]
         self.eeg_files = sorted(self.eeg_files, key = natural_key)
         
         if len(self.hypno_files)  != len(self.eeg_files): 

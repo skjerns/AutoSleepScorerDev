@@ -1,7 +1,10 @@
 import os
 import edfx_database
 import sleeploader
-import keras
+try:
+    from tensorflow import keras
+except:
+    import keras
 import models
 import pickle
 import tools
@@ -22,7 +25,7 @@ if __name__ == '__main__':
         references = {'RefEEG':False, 'RefEMG':False, 'RefEOG':False} # we do not set a reference, because the data is already referenced
         sleep = sleeploader.SleepDataset(datadir)
         # use float16 is you have problems with memory or a small hard disk.  Should be around 2.6 GB for float32.
-        sleep.load( channels = channels, references = references, verbose=0, dtype=np.float32) 
+        sleep.load( channels = channels, references = references, verbose=0, dtype=np.float16) 
         edfx_database.truncate_eeg(sleep)
 
     # if the pickle file already exist, just load that one.

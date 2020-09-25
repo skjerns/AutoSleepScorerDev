@@ -11,8 +11,11 @@ import sleeploader
 import csv
 import numpy as np
 import tools
+import re
 from tqdm import tqdm
-from urllib.request import urlretrieve
+from pyedflib import highlevel
+from urllib.request import urlretrieve, urlopen
+
 
 datadir='edfx'
 
@@ -20,24 +23,10 @@ datadir='edfx'
 
 def download_edfx(datadir):
 
-    
-    edfxfiles = ['SC4001E0-PSG.edf', 'SC4001E0-PSG.edf.hyp', 'SC4002E0-PSG.edf', 'SC4002E0-PSG.edf.hyp', 'SC4011E0-PSG.edf',
-                 'SC4011E0-PSG.edf.hyp', 'SC4012E0-PSG.edf', 'SC4012E0-PSG.edf.hyp', 'SC4021E0-PSG.edf', 'SC4021E0-PSG.edf.hyp',
-                 'SC4022E0-PSG.edf', 'SC4022E0-PSG.edf.hyp', 'SC4031E0-PSG.edf', 'SC4031E0-PSG.edf.hyp', 'SC4032E0-PSG.edf',
-                 'SC4032E0-PSG.edf.hyp', 'SC4041E0-PSG.edf', 'SC4041E0-PSG.edf.hyp', 'SC4042E0-PSG.edf', 'SC4042E0-PSG.edf.hyp',
-                 'SC4051E0-PSG.edf', 'SC4051E0-PSG.edf.hyp', 'SC4052E0-PSG.edf', 'SC4052E0-PSG.edf.hyp', 'SC4061E0-PSG.edf',
-                 'SC4061E0-PSG.edf.hyp', 'SC4062E0-PSG.edf', 'SC4062E0-PSG.edf.hyp', 'SC4071E0-PSG.edf', 'SC4071E0-PSG.edf.hyp',
-                 'SC4072E0-PSG.edf', 'SC4072E0-PSG.edf.hyp', 'SC4081E0-PSG.edf', 'SC4081E0-PSG.edf.hyp', 'SC4082E0-PSG.edf',
-                 'SC4082E0-PSG.edf.hyp', 'SC4091E0-PSG.edf', 'SC4091E0-PSG.edf.hyp', 'SC4092E0-PSG.edf', 'SC4092E0-PSG.edf.hyp',
-                 'SC4101E0-PSG.edf', 'SC4101E0-PSG.edf.hyp', 'SC4102E0-PSG.edf', 'SC4102E0-PSG.edf.hyp', 'SC4111E0-PSG.edf',
-                 'SC4111E0-PSG.edf.hyp', 'SC4112E0-PSG.edf', 'SC4112E0-PSG.edf.hyp', 'SC4121E0-PSG.edf', 'SC4121E0-PSG.edf.hyp',
-                 'SC4122E0-PSG.edf', 'SC4122E0-PSG.edf.hyp', 'SC4131E0-PSG.edf', 'SC4131E0-PSG.edf.hyp', 'SC4141E0-PSG.edf',
-                 'SC4141E0-PSG.edf.hyp', 'SC4142E0-PSG.edf', 'SC4142E0-PSG.edf.hyp', 'SC4151E0-PSG.edf', 'SC4151E0-PSG.edf.hyp',
-                 'SC4152E0-PSG.edf', 'SC4152E0-PSG.edf.hyp', 'SC4161E0-PSG.edf', 'SC4161E0-PSG.edf.hyp', 'SC4162E0-PSG.edf',
-                 'SC4162E0-PSG.edf.hyp', 'SC4171E0-PSG.edf', 'SC4171E0-PSG.edf.hyp', 'SC4172E0-PSG.edf', 'SC4172E0-PSG.edf.hyp',
-                 'SC4181E0-PSG.edf', 'SC4181E0-PSG.edf.hyp', 'SC4182E0-PSG.edf', 'SC4182E0-PSG.edf.hyp', 'SC4191E0-PSG.edf',
-                 'SC4191E0-PSG.edf.hyp', 'SC4192E0-PSG.edf', 'SC4192E0-PSG.edf.hyp']
-    edfxfiles = [x for x in edfxfiles if x.endswith('.edf')] + [x for x in edfxfiles if x.endswith('.hyp')] #just sorting them.
+    response = urlopen('https://physionet.org/physiobank/database/sleep-edfx/sleep-cassette/')
+    html = str(response.read())    
+    edfxfiles = re.findall(r'(?<=<a href=")[^"]*', html)[1:]
+
     print ('Downloading EDFx. This will take some time (~1.8 GB).\nDownloading the files manually might be faster.')
     try:os.mkdir(datadir)
     except Exception as e: print('') if type(e) is FileExistsError else print(e)
@@ -59,20 +48,25 @@ def convert_hypnograms(datadir):
     I found no working reader for the hypnogram edfs.
     """
     print('Converting hypnograms')
-    files = [x for x in os.listdir(datadir) if x.endswith('.hyp')]
-    for file in files:
+    files = [x for x in os.listdir(datadir) if x.endswith('Hypnogram.edf')]
+    for file in tqdm(files):
         file = os.path.join(datadir,file)
-        hypnogram = []
-        with open(file, mode='rb') as f: # b is important -> binary
         
-            raw_hypno = [x for x in str(f.read()).split('Sleep_stage_')][1:]
-            for h in raw_hypno:
-                stage  = h[0]
-                repeat = int(h.split('\\')[0][12:])//30 # no idea if this also works on linux
-                hypnogram.extend(stage*repeat)            
-        with open(file[:-4] + '.csv', "w") as f:
+        hypnogram = []
+        annot = highlevel.read_edf_header(file)['annotations']
+        for bstart, blength, bstage in annot:
+            length = int(blength.decode())
+            stage = bstage.decode()
+            if 'movement' in stage.lower(): stage='M'
+            stage = [str(stage[-1])]*(length//30)
+            hypnogram.extend(stage)
+            
+        csv_file = file.replace('-Hypnogram','')[:-5] + '0-PSG.csv'
+        with open(csv_file, "w") as f:
             writer = csv.writer(f, lineterminator='\r')
             writer.writerows(hypnogram)
+            
+            
     
 
 def truncate_eeg(sleepdataset):
@@ -86,7 +80,7 @@ def truncate_eeg(sleepdataset):
     hypno = sleep.hypno
     new_data = []
     new_hypno = []
-    for d, h in zip(data,hypno):
+    for d, h in tqdm(zip(data,hypno), total=len(data)):
         if d.shape[0]%3000!=0: d = d[:len(d)-d.shape[0]%3000]
         d = d.reshape([-1,3000,3])
         if 9 in h:
